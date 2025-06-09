@@ -17,3 +17,10 @@ SQLAlchemy[asyncio]==2.0.38
 sqlglot[rs]==26.6.0
 user-agents==2.2.0
 
+# Redfish告警系统新增依赖
+celery[redis]==5.4.0
+flower==2.0.1
+redfish==3.2.1
+aiohttp==3.10.11
+cryptography==42.0.8
+

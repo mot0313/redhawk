@@ -23,6 +23,11 @@ from module_admin.controller.role_controller import roleController
 from module_admin.controller.server_controller import serverController
 from module_admin.controller.user_controller import userController
 from module_generator.controller.gen_controller import genController
+from module_redfish.controller.device_controller import deviceController
+from module_redfish.controller.alert_controller import alertController
+from module_redfish.controller.business_rule_controller import businessRuleController
+from module_redfish.controller.dashboard_controller import dashboardController
+from module_redfish.controller.duty_controller import duty_controller
 from sub_applications.handle import handle_sub_applications
 from utils.common_util import worship
 from utils.log_util import logger
@@ -79,6 +84,11 @@ controller_list = [
     {'router': cacheController, 'tags': ['系统监控-缓存监控']},
     {'router': commonController, 'tags': ['通用模块']},
     {'router': genController, 'tags': ['代码生成']},
+    {'router': deviceController, 'tags': ['Redfish-设备管理']},
+    {'router': alertController, 'tags': ['Redfish-告警管理']},
+    {'router': businessRuleController, 'tags': ['Redfish-规则管理']},
+    {'router': dashboardController, 'tags': ['Redfish-首页数据']},
+    {'router': duty_controller, 'tags': ['Redfish-值班管理']},
 ]
 
 for controller in controller_list:

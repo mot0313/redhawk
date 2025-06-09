@@ -72,6 +72,14 @@ class RedisSettings(BaseSettings):
     redis_database: int = 2
 
 
+class RedfishSettings(BaseSettings):
+    """
+    Redfish配置
+    """
+
+    redfish_encrypt_key: str = ''
+
+
 class GenSettings:
     """
     代码生成配置
@@ -186,6 +194,14 @@ class GetConfig:
         return RedisSettings()
 
     @lru_cache()
+    def get_redfish_config(self):
+        """
+        获取Redfish配置
+        """
+        # 实例化Redfish配置模型
+        return RedfishSettings()
+
+    @lru_cache()
     def get_gen_config(self):
         """
         获取代码生成配置
@@ -238,6 +254,8 @@ JwtConfig = get_config.get_jwt_config()
 DataBaseConfig = get_config.get_database_config()
 # Redis配置
 RedisConfig = get_config.get_redis_config()
+# Redfish配置
+RedfishConfig = get_config.get_redfish_config()
 # 代码生成配置
 GenConfig = get_config.get_gen_config()
 # 上传配置
