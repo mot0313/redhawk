@@ -1,14 +1,64 @@
 <template>
-  <div class="alert-container">
-    <!-- 搜索筛选区域 -->
-    <el-card class="filter-card" shadow="never">
-      <el-form :model="queryParams" ref="queryRef" :inline="true" label-width="auto">
+  <div class="app-container">
+
+    <el-row :gutter="10" class="mb20">
+      <el-col :span="1.5">
+        <el-button
+          type="success"
+          plain
+          icon="Check"
+          :disabled="multiple"
+          @click="handleBatchResolve"
+          v-hasPermi="['redfish:alert:resolve']"
+        >批量解决</el-button>
+      </el-col>
+      <el-col :span="1.5">
+        <el-button
+          type="warning"
+          plain
+          icon="Close"
+          :disabled="multiple"
+          @click="handleBatchIgnore"
+          v-hasPermi="['redfish:alert:ignore']"
+        >批量忽略</el-button>
+      </el-col>
+      <el-col :span="1.5">
+        <el-button
+          type="info"
+          plain
+          icon="Download"
+          @click="handleExport"
+          v-hasPermi="['redfish:alert:export']"
+        >导出</el-button>
+      </el-col>
+      <el-col :span="1.5">
+        <el-button
+          type="primary"
+          plain
+          icon="Refresh"
+          @click="handleRefresh"
+        >刷新</el-button>
+      </el-col>
+      <right-toolbar
+        v-model:showSearch="showSearch"
+        @queryTable="getList"
+        :columns="columns"
+      ></right-toolbar>
+    </el-row>
+
+    <el-form
+      :model="queryParams"
+      ref="queryRef"
+      :inline="true"
+      v-show="showSearch"
+      label-width="68px"
+    >
         <el-form-item label="设备名称" prop="hostname">
           <el-input
             v-model="queryParams.hostname"
             placeholder="请输入设备名称"
             clearable
-            style="width: 200px"
+          style="width: 150px"
             @keyup.enter="handleQuery"
           />
         </el-form-item>
@@ -17,16 +67,16 @@
             v-model="queryParams.businessIp"
             placeholder="请输入业务IP"
             clearable
-            style="width: 200px"
+          style="width: 150px"
             @keyup.enter="handleQuery"
           />
         </el-form-item>
         <el-form-item label="组件类型" prop="componentType">
           <el-select
             v-model="queryParams.componentType"
-            placeholder="请选择组件类型"
+          placeholder="组件类型"
             clearable
-            style="width: 150px"
+          style="width: 100px"
           >
             <el-option label="CPU" value="cpu" />
             <el-option label="内存" value="memory" />
@@ -40,9 +90,9 @@
         <el-form-item label="告警级别" prop="alertLevel">
           <el-select
             v-model="queryParams.alertLevel"
-            placeholder="请选择告警级别"
+          placeholder="告警级别"
             clearable
-            style="width: 120px"
+          style="width: 100px"
           >
             <el-option label="紧急" value="urgent" />
             <el-option label="择期" value="scheduled" />
@@ -51,9 +101,9 @@
         <el-form-item label="状态" prop="alertStatus">
           <el-select
             v-model="queryParams.alertStatus"
-            placeholder="请选择状态"
+          placeholder="状态"
             clearable
-            style="width: 120px"
+          style="width: 100px"
           >
             <el-option label="活跃" value="active" />
             <el-option label="已解决" value="resolved" />
@@ -65,50 +115,7 @@
           <el-button icon="Refresh" @click="resetQuery">重置</el-button>
         </el-form-item>
       </el-form>
-    </el-card>
 
-    <!-- 工具栏 -->
-    <el-card class="toolbar-card" shadow="never">
-      <el-row :gutter="10" class="mb8">
-        <el-col :span="1.5">
-          <el-button
-            type="success"
-            plain
-            icon="Check"
-            :disabled="!multiple"
-            @click="handleBatchResolve"
-          >批量解决</el-button>
-        </el-col>
-        <el-col :span="1.5">
-          <el-button
-            type="warning"
-            plain
-            icon="Close"
-            :disabled="!multiple"
-            @click="handleBatchIgnore"
-          >批量忽略</el-button>
-        </el-col>
-        <el-col :span="1.5">
-          <el-button
-            type="info"
-            plain
-            icon="Download"
-            @click="handleExport"
-          >导出</el-button>
-        </el-col>
-        <el-col :span="1.5">
-          <el-button
-            type="primary"
-            plain
-            icon="Refresh"
-            @click="handleRefresh"
-          >刷新</el-button>
-        </el-col>
-      </el-row>
-    </el-card>
-
-    <!-- 告警列表 -->
-    <el-card shadow="never">
       <el-table
         v-loading="loading"
         :data="alertList"
@@ -116,7 +123,25 @@
         :default-sort="{prop: 'lastOccurrence', order: 'descending'}"
       >
         <el-table-column type="selection" width="50" align="center" />
-        <el-table-column label="设备信息" width="200" show-overflow-tooltip>
+      <el-table-column
+        label="序号"
+        align="center"
+        key="index"
+        width="50"
+        v-if="columns[0].visible"
+      >
+        <template #default="scope">
+          {{ (queryParams.pageNum - 1) * queryParams.pageSize + scope.$index + 1 }}
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="设备信息"
+        align="center"
+        key="deviceInfo"
+        width="200"
+        v-if="columns[1].visible"
+        :show-overflow-tooltip="true"
+      >
           <template #default="scope">
             <div>
               <div class="font-medium">{{ scope.row.hostname }}</div>
@@ -124,7 +149,14 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="组件信息" width="180" show-overflow-tooltip>
+      <el-table-column
+        label="组件信息"
+        align="center"
+        key="componentInfo"
+        width="180"
+        v-if="columns[2].visible"
+        :show-overflow-tooltip="true"
+      >
           <template #default="scope">
             <div>
               <div class="font-medium">{{ scope.row.componentType }}</div>
@@ -132,7 +164,13 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="告警级别" width="100" align="center">
+      <el-table-column
+        label="告警级别"
+        align="center"
+        key="alertLevel"
+        width="100"
+        v-if="columns[3].visible"
+      >
           <template #default="scope">
             <el-tag
               :type="scope.row.alertLevel === 'urgent' ? 'danger' : 'warning'"
@@ -142,7 +180,13 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="健康状态" width="100" align="center">
+      <el-table-column
+        label="健康状态"
+        align="center"
+        key="healthStatus"
+        width="100"
+        v-if="columns[4].visible"
+      >
           <template #default="scope">
             <el-tag
               :type="getHealthStatusType(scope.row.healthStatus)"
@@ -152,12 +196,21 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="告警消息" min-width="200" show-overflow-tooltip>
-          <template #default="scope">
-            <span :title="scope.row.alertMessage">{{ scope.row.alertMessage }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="发生时间" width="160" align="center">
+      <el-table-column
+        label="告警消息"
+        align="center"
+        key="alertMessage"
+        prop="alertMessage"
+        v-if="columns[5].visible"
+        :show-overflow-tooltip="true"
+      />
+      <el-table-column
+        label="发生时间"
+        align="center"
+        key="occurrenceTime"
+        width="160"
+        v-if="columns[6].visible"
+      >
           <template #default="scope">
             <div>
               <div class="text-sm">首次：{{ parseTime(scope.row.firstOccurrence, '{y}-{m}-{d} {h}:{i}') }}</div>
@@ -165,12 +218,24 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="发生次数" width="80" align="center">
+      <el-table-column
+        label="发生次数"
+        align="center"
+        key="occurrenceCount"
+        width="80"
+        v-if="columns[7].visible"
+      >
           <template #default="scope">
             <el-badge :value="scope.row.occurrenceCount" class="item" />
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="80" align="center">
+      <el-table-column
+        label="状态"
+        align="center"
+        key="alertStatus"
+        width="80"
+        v-if="columns[8].visible"
+      >
           <template #default="scope">
             <el-tag
               :type="getAlertStatusType(scope.row.alertStatus)"
@@ -180,7 +245,13 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+      <el-table-column
+        label="操作"
+        align="center"
+        width="200"
+        fixed="right"
+        v-if="columns[9].visible"
+      >
           <template #default="scope">
             <el-button
               link
@@ -206,7 +277,6 @@
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
       <pagination
         v-show="total > 0"
         :total="total"
@@ -214,7 +284,6 @@
         v-model:limit="queryParams.pageSize"
         @pagination="getList"
       />
-    </el-card>
 
     <!-- 告警详情弹窗 -->
     <el-dialog
@@ -326,8 +395,24 @@ const { proxy } = getCurrentInstance()
 const alertList = ref([])
 const loading = ref(true)
 const ids = ref([])
+const single = ref(true)
 const multiple = ref(true)
 const total = ref(0)
+const showSearch = ref(true)
+
+// 列显示控制
+const columns = ref([
+  { key: 0, label: `序号`, visible: true },
+  { key: 1, label: `设备信息`, visible: true },
+  { key: 2, label: `组件信息`, visible: true },
+  { key: 3, label: `告警级别`, visible: true },
+  { key: 4, label: `健康状态`, visible: true },
+  { key: 5, label: `告警消息`, visible: true },
+  { key: 6, label: `发生时间`, visible: true },
+  { key: 7, label: `发生次数`, visible: true },
+  { key: 8, label: `状态`, visible: true },
+  { key: 9, label: `操作`, visible: true }
+])
 
 // 查询参数
 const queryParams = ref({
@@ -418,6 +503,7 @@ function resetQuery() {
 /** 多选框选中数据 */
 function handleSelectionChange(selection) {
   ids.value = selection.map(item => item.alertId)
+  single.value = selection.length != 1
   multiple.value = !selection.length
 }
 
@@ -584,18 +670,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.alert-container {
-  padding: 6px;
-}
-
-.filter-card {
-  margin-bottom: 10px;
-}
-
-.toolbar-card {
-  margin-bottom: 10px;
-}
-
 .font-medium {
   font-weight: 500;
 }
@@ -606,9 +680,5 @@ onMounted(() => {
 
 .text-gray-500 {
   color: #6b7280;
-}
-
-.mb8 {
-  margin-bottom: 8px;
 }
 </style> 

@@ -148,10 +148,15 @@ class Log:
                 if request_from_swagger or request_from_redoc:
                     result_dict = {}
                 else:
-                    if result.status_code == 200:
-                        result_dict = {'code': result.status_code, 'message': '获取成功'}
+                    # 处理Pydantic模型返回（如PageResponseModel）
+                    if hasattr(result, 'status_code'):
+                        if result.status_code == 200:
+                            result_dict = {'code': result.status_code, 'message': '获取成功'}
+                        else:
+                            result_dict = {'code': result.status_code, 'message': '获取失败'}
                     else:
-                        result_dict = {'code': result.status_code, 'message': '获取失败'}
+                        # 对于没有status_code的Pydantic模型，认为操作成功
+                        result_dict = {'code': 200, 'message': '获取成功'}
             json_result = json.dumps(result_dict, ensure_ascii=False)
             # 根据响应结果获取响应状态及异常信息
             status = 1

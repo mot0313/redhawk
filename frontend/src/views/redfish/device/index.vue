@@ -251,6 +251,15 @@
         class-name="small-padding fixed-width"
       >
         <template #default="scope">
+          <el-tooltip content="查看详情" placement="top">
+            <el-button
+              link
+              type="info"
+              icon="View"
+              @click="handleDetail(scope.row)"
+              v-hasPermi="['redfish:device:query']"
+            ></el-button>
+          </el-tooltip>
           <el-tooltip content="修改" placement="top">
             <el-button
               link
@@ -267,15 +276,6 @@
               icon="Delete"
               @click="handleDelete(scope.row)"
               v-hasPermi="['redfish:device:remove']"
-            ></el-button>
-          </el-tooltip>
-          <el-tooltip content="查看详情" placement="top">
-            <el-button
-              link
-              type="info"
-              icon="View"
-              @click="handleDetail(scope.row)"
-              v-hasPermi="['redfish:device:query']"
             ></el-button>
           </el-tooltip>
         </template>

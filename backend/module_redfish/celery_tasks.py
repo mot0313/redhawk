@@ -299,7 +299,7 @@ def determine_alert_type(db: Session, business_type: str, hardware_type: str) ->
         # 查询匹配的规则
         rule = db.query(BusinessHardwareUrgencyRules).filter(
             BusinessHardwareUrgencyRules.business_type == business_type,
-            BusinessHardwareUrgencyRules.hardware_type == hardware_type,
+            BusinessHardwareUrgencyRules.hardware_type == hardware_type.upper(),
             BusinessHardwareUrgencyRules.is_active == 1
         ).first()
         

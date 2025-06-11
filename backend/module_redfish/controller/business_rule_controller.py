@@ -3,7 +3,7 @@
 """
 from datetime import datetime
 from typing import Union, Optional, List
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Query, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from module_admin.annotation.log_annotation import Log
@@ -17,7 +17,11 @@ from module_redfish.service.business_rule_service import BusinessRuleService
 from module_redfish.service.alert_urgency_service import AlertUrgencyService
 from module_redfish.entity.vo.business_rule_vo import (
     BusinessRulePageQueryModel, AddBusinessRuleModel, EditBusinessRuleModel, DeleteBusinessRuleModel,
-    BusinessRuleDetailModel, BusinessRuleStatisticsModel, UrgencyRuleMatchModel, UrgencyRuleResultModel
+    BusinessRuleDetailModel, BusinessRuleStatisticsModel, UrgencyRuleMatchModel, UrgencyRuleResultModel,
+    BusinessTypeQueryModel, HardwareTypeQueryModel, UrgencyRuleQueryModel,
+    AddBusinessTypeModel, EditBusinessTypeModel,
+    AddHardwareTypeModel, EditHardwareTypeModel,
+    AddUrgencyRuleModel, EditUrgencyRuleModel
 )
 from utils.response_util import ResponseUtil
 from utils.page_util import PageResponseModel
@@ -64,29 +68,6 @@ async def get_rule_statistics(
     except Exception as e:
         logger.error(f'获取规则统计信息失败: {str(e)}')
         return ResponseUtil.failure(msg='获取规则统计信息失败')
-
-
-@businessRuleController.get(
-    '/{rule_id}',
-    response_model=BusinessRuleDetailModel,
-    dependencies=[Depends(CheckUserInterfaceAuth('redfish:businessRule:query'))]
-)
-async def get_rule_detail(
-    request: Request,
-    rule_id: int,
-    query_db: AsyncSession = Depends(get_db)
-):
-    """获取规则详情"""
-    try:
-        rule_detail = await BusinessRuleService.get_rule_detail_services(query_db, rule_id)
-        logger.info(f'获取规则详情成功: {rule_id}')
-        return ResponseUtil.success(data=rule_detail)
-    except ValueError as e:
-        logger.warning(f'获取规则详情失败: {str(e)}')
-        return ResponseUtil.failure(msg=str(e))
-    except Exception as e:
-        logger.error(f'获取规则详情失败: {str(e)}')
-        return ResponseUtil.failure(msg='获取规则详情失败')
 
 
 @businessRuleController.post('', dependencies=[Depends(CheckUserInterfaceAuth('redfish:businessRule:add'))])
@@ -344,4 +325,255 @@ async def batch_update_alert_urgency(
         return ResponseUtil.success(data=result, msg='批量更新告警紧急度成功')
     except Exception as e:
         logger.error(f'批量更新告警紧急度失败: {str(e)}')
-        return ResponseUtil.failure(msg='批量更新告警紧急度失败') 
+        return ResponseUtil.failure(msg='批量更新告警紧急度失败')
+
+
+# ==================== 业务类型管理 ====================
+
+@businessRuleController.get("/business-types", summary="获取业务类型列表")
+async def get_business_type_list(
+    pageNum: int = Query(1, alias="pageNum", description="页码"),
+    pageSize: int = Query(10, alias="pageSize", description="每页大小"),
+    typeCode: str = Query(None, alias="typeCode", description="类型编码"),
+    typeName: str = Query(None, alias="typeName", description="类型名称"),
+    isActive: int = Query(None, alias="isActive", description="是否启用"),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取业务类型分页列表"""
+    query_object = BusinessTypeQueryModel.as_query(
+        page_num=pageNum,
+        page_size=pageSize,
+        type_code=typeCode,
+        type_name=typeName,
+        is_active=isActive
+    )
+    return await BusinessRuleService.get_business_type_list_services(db, query_object, is_page=True)
+
+
+@businessRuleController.get("/business-types/all", summary="获取所有业务类型")
+async def get_all_business_types(db: AsyncSession = Depends(get_db)):
+    """获取所有业务类型（不分页，用于下拉框）"""
+    query_object = BusinessTypeQueryModel()
+    result = await BusinessRuleService.get_business_type_list_services(db, query_object, is_page=False)
+    return ResponseUtil.success(data=result)
+
+
+@businessRuleController.get("/business-types/options", summary="获取业务类型选项")
+async def get_business_type_options(db: AsyncSession = Depends(get_db)):
+    """获取业务类型选项（用于下拉框）"""
+    return await BusinessRuleService.get_business_type_options_services(db)
+
+
+@businessRuleController.get("/business-types/{type_id}", summary="获取业务类型详情")
+async def get_business_type_detail(
+    type_id: int = Path(..., description="业务类型ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取业务类型详情"""
+    result = await BusinessRuleService.get_business_type_detail_services(db, type_id)
+    return result
+
+
+@businessRuleController.post("/business-types", summary="新增业务类型")
+async def add_business_type(
+    business_type: AddBusinessTypeModel,
+    db: AsyncSession = Depends(get_db)
+):
+    """新增业务类型"""
+    return await BusinessRuleService.add_business_type_services(db, business_type)
+
+
+@businessRuleController.put("/business-types", summary="编辑业务类型")
+async def edit_business_type(
+    business_type: EditBusinessTypeModel,
+    db: AsyncSession = Depends(get_db)
+):
+    """编辑业务类型"""
+    return await BusinessRuleService.edit_business_type_services(db, business_type)
+
+
+@businessRuleController.delete("/business-types/{type_ids}", summary="删除业务类型")
+async def delete_business_type(
+    type_ids: str = Path(..., description="业务类型ID列表，逗号分隔"),
+    db: AsyncSession = Depends(get_db)
+):
+    """删除业务类型"""
+    id_list = [int(id.strip()) for id in type_ids.split(',') if id.strip()]
+    return await BusinessRuleService.delete_business_type_services(db, id_list)
+
+
+# ==================== 硬件类型管理 ====================
+
+@businessRuleController.get("/hardware-types", summary="获取硬件类型列表")
+async def get_hardware_type_list(
+    pageNum: int = Query(1, alias="pageNum", description="页码"),
+    pageSize: int = Query(10, alias="pageSize", description="每页大小"),
+    typeCode: str = Query(None, alias="typeCode", description="类型编码"),
+    typeName: str = Query(None, alias="typeName", description="类型名称"),
+    category: str = Query(None, alias="category", description="硬件分类"),
+    isActive: int = Query(None, alias="isActive", description="是否启用"),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取硬件类型分页列表"""
+    query_object = HardwareTypeQueryModel.as_query(
+        page_num=pageNum,
+        page_size=pageSize,
+        type_code=typeCode,
+        type_name=typeName,
+        category=category,
+        is_active=isActive
+    )
+    return await BusinessRuleService.get_hardware_type_list_services(db, query_object, is_page=True)
+
+
+@businessRuleController.get("/hardware-types/all", summary="获取所有硬件类型")
+async def get_all_hardware_types(db: AsyncSession = Depends(get_db)):
+    """获取所有硬件类型（不分页，用于下拉框）"""
+    query_object = HardwareTypeQueryModel()
+    result = await BusinessRuleService.get_hardware_type_list_services(db, query_object, is_page=False)
+    return ResponseUtil.success(data=result)
+
+
+@businessRuleController.get("/hardware-types/options", summary="获取硬件类型选项")
+async def get_hardware_type_options(db: AsyncSession = Depends(get_db)):
+    """获取硬件类型选项（用于下拉框）"""
+    return await BusinessRuleService.get_hardware_type_options_services(db)
+
+
+@businessRuleController.get("/hardware-types/categories", summary="获取硬件分类选项")
+async def get_hardware_categories(db: AsyncSession = Depends(get_db)):
+    """获取硬件分类选项"""
+    return await BusinessRuleService.get_hardware_categories_services(db)
+
+
+@businessRuleController.get("/hardware-types/{type_id}", summary="获取硬件类型详情")
+async def get_hardware_type_detail(
+    type_id: int = Path(..., description="硬件类型ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取硬件类型详情"""
+    result = await BusinessRuleService.get_hardware_type_detail_services(db, type_id)
+    return result
+
+
+@businessRuleController.post("/hardware-types", summary="新增硬件类型")
+async def add_hardware_type(
+    hardware_type: AddHardwareTypeModel,
+    db: AsyncSession = Depends(get_db)
+):
+    """新增硬件类型"""
+    return await BusinessRuleService.add_hardware_type_services(db, hardware_type)
+
+
+@businessRuleController.put("/hardware-types", summary="编辑硬件类型")
+async def edit_hardware_type(
+    hardware_type: EditHardwareTypeModel,
+    db: AsyncSession = Depends(get_db)
+):
+    """编辑硬件类型"""
+    return await BusinessRuleService.edit_hardware_type_services(db, hardware_type)
+
+
+@businessRuleController.delete("/hardware-types/{type_ids}", summary="删除硬件类型")
+async def delete_hardware_type(
+    type_ids: str = Path(..., description="硬件类型ID列表，逗号分隔"),
+    db: AsyncSession = Depends(get_db)
+):
+    """删除硬件类型"""
+    id_list = [int(id.strip()) for id in type_ids.split(',') if id.strip()]
+    return await BusinessRuleService.delete_hardware_type_services(db, id_list)
+
+
+# ==================== 紧急度规则管理 ====================
+
+@businessRuleController.get("/urgency-rules", summary="获取紧急度规则列表")
+async def get_urgency_rule_list(
+    pageNum: int = Query(1, alias="pageNum", description="页码"),
+    pageSize: int = Query(10, alias="pageSize", description="每页大小"),
+    businessType: str = Query(None, alias="businessType", description="业务类型"),
+    hardwareType: str = Query(None, alias="hardwareType", description="硬件类型"),
+    urgencyLevel: str = Query(None, alias="urgencyLevel", description="紧急程度"),
+    isActive: int = Query(None, alias="isActive", description="是否启用"),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取紧急度规则分页列表"""
+    query_object = UrgencyRuleQueryModel.as_query(
+        page_num=pageNum,
+        page_size=pageSize,
+        business_type=businessType,
+        hardware_type=hardwareType,
+        urgency_level=urgencyLevel,
+        is_active=isActive
+    )
+    return await BusinessRuleService.get_urgency_rule_list_services(db, query_object, is_page=True)
+
+
+@businessRuleController.get("/urgency-rules/all", summary="获取所有紧急度规则")
+async def get_all_urgency_rules(db: AsyncSession = Depends(get_db)):
+    """获取所有紧急度规则（不分页）"""
+    query_object = UrgencyRuleQueryModel()
+    result = await BusinessRuleService.get_urgency_rule_list_services(db, query_object, is_page=False)
+    return ResponseUtil.success(data=result)
+
+
+@businessRuleController.get("/urgency-rules/{rule_id}", summary="获取紧急度规则详情")
+async def get_urgency_rule_detail(
+    rule_id: int = Path(..., description="规则ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取紧急度规则详情"""
+    result = await BusinessRuleService.get_urgency_rule_detail_services(db, rule_id)
+    return result
+
+
+@businessRuleController.post("/urgency-rules", summary="新增紧急度规则")
+async def add_urgency_rule(
+    rule: AddUrgencyRuleModel,
+    db: AsyncSession = Depends(get_db)
+):
+    """新增紧急度规则"""
+    return await BusinessRuleService.add_urgency_rule_services(db, rule)
+
+
+@businessRuleController.put("/urgency-rules", summary="编辑紧急度规则")
+async def edit_urgency_rule(
+    rule: EditUrgencyRuleModel,
+    db: AsyncSession = Depends(get_db)
+):
+    """编辑紧急度规则"""
+    return await BusinessRuleService.edit_urgency_rule_services(db, rule)
+
+
+@businessRuleController.delete("/urgency-rules/{rule_ids}", summary="删除紧急度规则")
+async def delete_urgency_rule(
+    rule_ids: str = Path(..., description="规则ID列表，逗号分隔"),
+    db: AsyncSession = Depends(get_db)
+):
+    """删除紧急度规则"""
+    id_list = [int(id.strip()) for id in rule_ids.split(',') if id.strip()]
+    return await BusinessRuleService.delete_urgency_rule_services(db, id_list)
+
+
+# ==================== 通用路由（必须放在最后） ====================
+
+@businessRuleController.get(
+    '/{rule_id}',
+    response_model=BusinessRuleDetailModel,
+    dependencies=[Depends(CheckUserInterfaceAuth('redfish:businessRule:query'))]
+)
+async def get_rule_detail(
+    request: Request,
+    rule_id: int,
+    query_db: AsyncSession = Depends(get_db)
+):
+    """获取规则详情"""
+    try:
+        rule_detail = await BusinessRuleService.get_rule_detail_services(query_db, rule_id)
+        logger.info(f'获取规则详情成功: {rule_id}')
+        return ResponseUtil.success(data=rule_detail)
+    except ValueError as e:
+        logger.warning(f'获取规则详情失败: {str(e)}')
+        return ResponseUtil.failure(msg=str(e))
+    except Exception as e:
+        logger.error(f'获取规则详情失败: {str(e)}')
+        return ResponseUtil.failure(msg='获取规则详情失败') 

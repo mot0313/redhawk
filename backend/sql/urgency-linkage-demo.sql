@@ -11,7 +11,9 @@ SELECT
     d.device_id,
     d.device_name,
     d.business_type,
+    bt.type_name as business_type_name,
     'CPU' as component_type,  -- 假设是CPU告警
+    ht.type_name as component_type_name,
     COALESCE(r.urgency_level, 'scheduled') as urgency_level,
     CASE 
         WHEN r.rule_id IS NOT NULL THEN '匹配到规则'
@@ -25,6 +27,8 @@ LEFT JOIN business_hardware_urgency_rules r ON (
     AND r.hardware_type = 'CPU'
     AND r.is_active = 1
 )
+LEFT JOIN business_type_dict bt ON d.business_type = bt.type_code
+LEFT JOIN hardware_type_dict ht ON r.hardware_type = ht.type_code
 WHERE d.device_id = 1000;  -- 替换为实际设备ID
 
 -- ----------------------------
@@ -36,7 +40,9 @@ SELECT
     a.device_id,
     d.device_name,
     d.business_type,
+    bt.type_name as business_type_name,
     a.component_type,
+    ht.type_name as component_type_name,
     a.alert_message,
     COALESCE(r.urgency_level, 'scheduled') as urgency_level,
     CASE 
@@ -49,9 +55,11 @@ FROM alert_info a
 JOIN device_info d ON a.device_id = d.device_id
 LEFT JOIN business_hardware_urgency_rules r ON (
     d.business_type = r.business_type 
-    AND a.component_type = r.hardware_type
+    AND UPPER(a.component_type) = r.hardware_type
     AND r.is_active = 1
 )
+LEFT JOIN business_type_dict bt ON d.business_type = bt.type_code
+LEFT JOIN hardware_type_dict ht ON r.hardware_type = ht.type_code
 WHERE a.alert_status = 'active'
 ORDER BY 
     CASE WHEN r.urgency_level = 'urgent' THEN 1 ELSE 2 END,  -- 紧急告警优先
@@ -65,6 +73,7 @@ SELECT
     d.device_id,
     d.device_name,
     d.business_type,
+    bt.type_name as business_type_name,
     COUNT(*) as total_alerts,
     COUNT(CASE WHEN COALESCE(r.urgency_level, 'scheduled') = 'urgent' THEN 1 END) as urgent_count,
     COUNT(CASE WHEN COALESCE(r.urgency_level, 'scheduled') = 'scheduled' THEN 1 END) as scheduled_count,
@@ -84,12 +93,13 @@ FROM device_info d
 JOIN alert_info a ON d.device_id = a.device_id
 LEFT JOIN business_hardware_urgency_rules r ON (
     d.business_type = r.business_type 
-    AND a.component_type = r.hardware_type
+    AND UPPER(a.component_type) = r.hardware_type
     AND r.is_active = 1
 )
+LEFT JOIN business_type_dict bt ON d.business_type = bt.type_code
 WHERE a.alert_status = 'active'
   AND d.device_id = 1000  -- 替换为实际设备ID
-GROUP BY d.device_id, d.device_name, d.business_type;
+GROUP BY d.device_id, d.device_name, d.business_type, bt.type_name;
 
 -- ----------------------------
 -- 4、全局紧急度分布统计

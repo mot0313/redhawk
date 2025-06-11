@@ -10,7 +10,11 @@ from module_redfish.dao.business_rule_dao import BusinessRuleDao
 from module_redfish.entity.vo.business_rule_vo import (
     BusinessRulePageQueryModel, AddBusinessRuleModel, EditBusinessRuleModel, DeleteBusinessRuleModel,
     BusinessRuleDetailModel, BusinessRuleModel, BusinessRuleStatisticsModel,
-    UrgencyRuleMatchModel, UrgencyRuleResultModel
+    UrgencyRuleMatchModel, UrgencyRuleResultModel,
+    BusinessTypeQueryModel, HardwareTypeQueryModel, UrgencyRuleQueryModel,
+    AddBusinessTypeModel, EditBusinessTypeModel,
+    AddHardwareTypeModel, EditHardwareTypeModel,
+    AddUrgencyRuleModel, EditUrgencyRuleModel
 )
 from utils.response_util import ResponseUtil
 from utils.page_util import PageResponseModel
@@ -380,4 +384,392 @@ class BusinessRuleService:
                 categorized[category] = []
             categorized[category].append(ht)
         
-        return categorized 
+        return categorized
+
+    # ==================== 业务类型管理方法 ====================
+    
+    @classmethod
+    async def get_business_type_list_services(
+        cls,
+        db: AsyncSession,
+        query_object: BusinessTypeQueryModel,
+        is_page: bool = False
+    ):
+        """获取业务类型列表"""
+        try:
+            from module_redfish.dao.business_rule_dao import BusinessTypeDao
+            from utils.common_util import CamelCaseUtil
+            business_types, total = await BusinessTypeDao.get_business_type_list(db, query_object, is_page)
+            
+            # 参考device service的转换方式
+            business_type_dicts = [bt.__dict__.copy() for bt in business_types]
+            for bt_dict in business_type_dicts:
+                bt_dict.pop('_sa_instance_state', None)
+            
+            if is_page:
+                has_next = math.ceil(total / query_object.page_size) > query_object.page_num if total > 0 else False
+                return PageResponseModel(
+                    rows=CamelCaseUtil.transform_result(business_type_dicts),
+                    pageNum=query_object.page_num,
+                    pageSize=query_object.page_size,
+                    total=total,
+                    hasNext=has_next
+                )
+            else:
+                return CamelCaseUtil.transform_result(business_type_dicts)
+        except Exception as e:
+            logger.error(f"获取业务类型列表失败: {str(e)}")
+            raise
+
+    @classmethod
+    async def get_business_type_detail_services(cls, db: AsyncSession, type_id: int) -> ResponseUtil:
+        """获取业务类型详情"""
+        try:
+            from module_redfish.dao.business_rule_dao import BusinessTypeDao
+            from utils.common_util import CamelCaseUtil
+            business_type = await BusinessTypeDao.get_business_type_detail(db, type_id)
+            if business_type:
+                # 参考device service的转换方式
+                business_type_dict = business_type.__dict__.copy()
+                business_type_dict.pop('_sa_instance_state', None)
+                return ResponseUtil.success(data=CamelCaseUtil.transform_result(business_type_dict))
+            else:
+                return ResponseUtil.failure(msg="业务类型不存在")
+        except Exception as e:
+            logger.error(f"获取业务类型详情失败: {str(e)}")
+            return ResponseUtil.failure(msg="获取业务类型详情失败")
+
+    @classmethod
+    async def add_business_type_services(cls, db: AsyncSession, business_type: AddBusinessTypeModel) -> ResponseUtil:
+        """新增业务类型"""
+        try:
+            from module_redfish.dao.business_rule_dao import BusinessTypeDao
+            # 检查类型编码是否已存在
+            if await BusinessTypeDao.check_business_type_exists(db, business_type.type_code):
+                return ResponseUtil.failure(msg="业务类型编码已存在")
+            
+            success = await BusinessTypeDao.add_business_type(db, business_type)
+            if success:
+                logger.info(f"成功添加业务类型: {business_type.type_code}")
+                return ResponseUtil.success(msg="添加业务类型成功")
+            else:
+                return ResponseUtil.failure(msg="添加业务类型失败")
+        except Exception as e:
+            logger.error(f"添加业务类型失败: {str(e)}")
+            return ResponseUtil.failure(msg="添加业务类型失败")
+
+    @classmethod
+    async def edit_business_type_services(cls, db: AsyncSession, business_type: EditBusinessTypeModel) -> ResponseUtil:
+        """编辑业务类型"""
+        try:
+            from module_redfish.dao.business_rule_dao import BusinessTypeDao
+            # 检查业务类型是否存在
+            existing = await BusinessTypeDao.get_business_type_detail(db, business_type.type_id)
+            if not existing:
+                return ResponseUtil.failure(msg="业务类型不存在")
+            
+            # 如果修改了类型编码，检查是否与其他记录冲突
+            if business_type.type_code and business_type.type_code != existing.type_code:
+                if await BusinessTypeDao.check_business_type_exists(db, business_type.type_code, business_type.type_id):
+                    return ResponseUtil.failure(msg="业务类型编码已存在")
+            
+            success = await BusinessTypeDao.edit_business_type(db, business_type)
+            if success:
+                logger.info(f"成功编辑业务类型: {business_type.type_id}")
+                return ResponseUtil.success(msg="编辑业务类型成功")
+            else:
+                return ResponseUtil.failure(msg="编辑业务类型失败")
+        except Exception as e:
+            logger.error(f"编辑业务类型失败: {str(e)}")
+            return ResponseUtil.failure(msg="编辑业务类型失败")
+
+    @classmethod
+    async def delete_business_type_services(cls, db: AsyncSession, type_ids: List[int]) -> ResponseUtil:
+        """删除业务类型"""
+        try:
+            from module_redfish.dao.business_rule_dao import BusinessTypeDao
+            if not type_ids:
+                return ResponseUtil.failure(msg="请选择要删除的业务类型")
+            
+            success = await BusinessTypeDao.delete_business_type(db, type_ids)
+            if success:
+                logger.info(f"成功删除业务类型: {type_ids}")
+                return ResponseUtil.success(msg="删除业务类型成功")
+            else:
+                return ResponseUtil.failure(msg="删除业务类型失败")
+        except Exception as e:
+            logger.error(f"删除业务类型失败: {str(e)}")
+            return ResponseUtil.failure(msg="删除业务类型失败")
+
+    @classmethod
+    async def get_business_type_options_services(cls, db: AsyncSession) -> ResponseUtil:
+        """获取业务类型选项"""
+        try:
+            from module_redfish.dao.business_rule_dao import BusinessTypeDao
+            from utils.common_util import CamelCaseUtil
+            options = await BusinessTypeDao.get_business_type_options(db)
+            return ResponseUtil.success(data=CamelCaseUtil.transform_result(options))
+        except Exception as e:
+            logger.error(f"获取业务类型选项失败: {str(e)}")
+            return ResponseUtil.failure(msg="获取业务类型选项失败")
+
+    # ==================== 硬件类型管理方法 ====================
+    
+    @classmethod
+    async def get_hardware_type_list_services(
+        cls,
+        db: AsyncSession,
+        query_object: HardwareTypeQueryModel,
+        is_page: bool = False
+    ):
+        """获取硬件类型列表"""
+        try:
+            from module_redfish.dao.business_rule_dao import HardwareTypeDao
+            from utils.common_util import CamelCaseUtil
+            hardware_types, total = await HardwareTypeDao.get_hardware_type_list(db, query_object, is_page)
+            
+            # 参考device service的转换方式
+            hardware_type_dicts = [ht.__dict__.copy() for ht in hardware_types]
+            for ht_dict in hardware_type_dicts:
+                ht_dict.pop('_sa_instance_state', None)
+            
+            if is_page:
+                has_next = math.ceil(total / query_object.page_size) > query_object.page_num if total > 0 else False
+                return PageResponseModel(
+                    rows=CamelCaseUtil.transform_result(hardware_type_dicts),
+                    pageNum=query_object.page_num,
+                    pageSize=query_object.page_size,
+                    total=total,
+                    hasNext=has_next
+                )
+            else:
+                return CamelCaseUtil.transform_result(hardware_type_dicts)
+        except Exception as e:
+            logger.error(f"获取硬件类型列表失败: {str(e)}")
+            raise
+
+    @classmethod
+    async def get_hardware_type_detail_services(cls, db: AsyncSession, type_id: int) -> ResponseUtil:
+        """获取硬件类型详情"""
+        try:
+            from module_redfish.dao.business_rule_dao import HardwareTypeDao
+            from utils.common_util import CamelCaseUtil
+            hardware_type = await HardwareTypeDao.get_hardware_type_detail(db, type_id)
+            if hardware_type:
+                # 参考device service的转换方式
+                hardware_type_dict = hardware_type.__dict__.copy()
+                hardware_type_dict.pop('_sa_instance_state', None)
+                return ResponseUtil.success(data=CamelCaseUtil.transform_result(hardware_type_dict))
+            else:
+                return ResponseUtil.failure(msg="硬件类型不存在")
+        except Exception as e:
+            logger.error(f"获取硬件类型详情失败: {str(e)}")
+            return ResponseUtil.failure(msg="获取硬件类型详情失败")
+
+    @classmethod
+    async def add_hardware_type_services(cls, db: AsyncSession, hardware_type: AddHardwareTypeModel) -> ResponseUtil:
+        """新增硬件类型"""
+        try:
+            from module_redfish.dao.business_rule_dao import HardwareTypeDao
+            # 检查类型编码是否已存在
+            if await HardwareTypeDao.check_hardware_type_exists(db, hardware_type.type_code):
+                return ResponseUtil.failure(msg="硬件类型编码已存在")
+            
+            success = await HardwareTypeDao.add_hardware_type(db, hardware_type)
+            if success:
+                logger.info(f"成功添加硬件类型: {hardware_type.type_code}")
+                return ResponseUtil.success(msg="添加硬件类型成功")
+            else:
+                return ResponseUtil.failure(msg="添加硬件类型失败")
+        except Exception as e:
+            logger.error(f"添加硬件类型失败: {str(e)}")
+            return ResponseUtil.failure(msg="添加硬件类型失败")
+
+    @classmethod
+    async def edit_hardware_type_services(cls, db: AsyncSession, hardware_type: EditHardwareTypeModel) -> ResponseUtil:
+        """编辑硬件类型"""
+        try:
+            from module_redfish.dao.business_rule_dao import HardwareTypeDao
+            # 检查硬件类型是否存在
+            existing = await HardwareTypeDao.get_hardware_type_detail(db, hardware_type.type_id)
+            if not existing:
+                return ResponseUtil.failure(msg="硬件类型不存在")
+            
+            # 如果修改了类型编码，检查是否与其他记录冲突
+            if hardware_type.type_code and hardware_type.type_code != existing.type_code:
+                if await HardwareTypeDao.check_hardware_type_exists(db, hardware_type.type_code, hardware_type.type_id):
+                    return ResponseUtil.failure(msg="硬件类型编码已存在")
+            
+            success = await HardwareTypeDao.edit_hardware_type(db, hardware_type)
+            if success:
+                logger.info(f"成功编辑硬件类型: {hardware_type.type_id}")
+                return ResponseUtil.success(msg="编辑硬件类型成功")
+            else:
+                return ResponseUtil.failure(msg="编辑硬件类型失败")
+        except Exception as e:
+            logger.error(f"编辑硬件类型失败: {str(e)}")
+            return ResponseUtil.failure(msg="编辑硬件类型失败")
+
+    @classmethod
+    async def delete_hardware_type_services(cls, db: AsyncSession, type_ids: List[int]) -> ResponseUtil:
+        """删除硬件类型"""
+        try:
+            from module_redfish.dao.business_rule_dao import HardwareTypeDao
+            if not type_ids:
+                return ResponseUtil.failure(msg="请选择要删除的硬件类型")
+            
+            success = await HardwareTypeDao.delete_hardware_type(db, type_ids)
+            if success:
+                logger.info(f"成功删除硬件类型: {type_ids}")
+                return ResponseUtil.success(msg="删除硬件类型成功")
+            else:
+                return ResponseUtil.failure(msg="删除硬件类型失败")
+        except Exception as e:
+            logger.error(f"删除硬件类型失败: {str(e)}")
+            return ResponseUtil.failure(msg="删除硬件类型失败")
+
+    @classmethod
+    async def get_hardware_type_options_services(cls, db: AsyncSession) -> ResponseUtil:
+        """获取硬件类型选项"""
+        try:
+            from module_redfish.dao.business_rule_dao import HardwareTypeDao
+            from utils.common_util import CamelCaseUtil
+            options = await HardwareTypeDao.get_hardware_type_options(db)
+            return ResponseUtil.success(data=CamelCaseUtil.transform_result(options))
+        except Exception as e:
+            logger.error(f"获取硬件类型选项失败: {str(e)}")
+            return ResponseUtil.failure(msg="获取硬件类型选项失败")
+
+    @classmethod
+    async def get_hardware_categories_services(cls, db: AsyncSession) -> ResponseUtil:
+        """获取硬件分类选项"""
+        try:
+            from module_redfish.dao.business_rule_dao import HardwareTypeDao
+            from utils.common_util import CamelCaseUtil
+            categories = await HardwareTypeDao.get_hardware_categories(db)
+            # 转换为前端期望的格式
+            category_options = [
+                {
+                    'value': category,
+                    'label': category
+                }
+                for category in categories
+            ]
+            return ResponseUtil.success(data=CamelCaseUtil.transform_result(category_options))
+        except Exception as e:
+            logger.error(f"获取硬件分类选项失败: {str(e)}")
+            return ResponseUtil.failure(msg="获取硬件分类选项失败")
+
+    # ==================== 紧急度规则管理方法 ====================
+    
+    @classmethod
+    async def get_urgency_rule_list_services(
+        cls,
+        db: AsyncSession,
+        query_object: UrgencyRuleQueryModel,
+        is_page: bool = False
+    ):
+        """获取紧急度规则列表"""
+        try:
+            from module_redfish.dao.business_rule_dao import UrgencyRuleDao
+            from utils.common_util import CamelCaseUtil
+            rules, total = await UrgencyRuleDao.get_urgency_rule_list(db, query_object, is_page)
+            
+            # UrgencyRuleDao.get_urgency_rule_list 已经返回字典列表，无需转换
+            if is_page:
+                has_next = math.ceil(total / query_object.page_size) > query_object.page_num if total > 0 else False
+                return PageResponseModel(
+                    rows=CamelCaseUtil.transform_result(rules),
+                    pageNum=query_object.page_num,
+                    pageSize=query_object.page_size,
+                    total=total,
+                    hasNext=has_next
+                )
+            else:
+                return CamelCaseUtil.transform_result(rules)
+        except Exception as e:
+            logger.error(f"获取紧急度规则列表失败: {str(e)}")
+            raise
+
+    @classmethod
+    async def get_urgency_rule_detail_services(cls, db: AsyncSession, rule_id: int) -> ResponseUtil:
+        """获取紧急度规则详情"""
+        try:
+            from module_redfish.dao.business_rule_dao import UrgencyRuleDao
+            from utils.common_util import CamelCaseUtil
+            rule = await UrgencyRuleDao.get_urgency_rule_detail(db, rule_id)
+            if rule:
+                # 参考device service的转换方式
+                rule_dict = rule.__dict__.copy()
+                rule_dict.pop('_sa_instance_state', None)
+                return ResponseUtil.success(data=CamelCaseUtil.transform_result(rule_dict))
+            else:
+                return ResponseUtil.failure(msg="紧急度规则不存在")
+        except Exception as e:
+            logger.error(f"获取紧急度规则详情失败: {str(e)}")
+            return ResponseUtil.failure(msg="获取紧急度规则详情失败")
+
+    @classmethod
+    async def add_urgency_rule_services(cls, db: AsyncSession, rule: AddUrgencyRuleModel) -> ResponseUtil:
+        """新增紧急度规则"""
+        try:
+            from module_redfish.dao.business_rule_dao import UrgencyRuleDao
+            # 检查规则是否已存在
+            if await UrgencyRuleDao.check_urgency_rule_exists(db, rule.business_type, rule.hardware_type):
+                return ResponseUtil.failure(msg="该业务类型和硬件类型的规则已存在")
+            
+            success = await UrgencyRuleDao.add_urgency_rule(db, rule)
+            if success:
+                logger.info(f"成功添加紧急度规则: {rule.business_type} - {rule.hardware_type}")
+                return ResponseUtil.success(msg="添加紧急度规则成功")
+            else:
+                return ResponseUtil.failure(msg="添加紧急度规则失败")
+        except Exception as e:
+            logger.error(f"添加紧急度规则失败: {str(e)}")
+            return ResponseUtil.failure(msg="添加紧急度规则失败")
+
+    @classmethod
+    async def edit_urgency_rule_services(cls, db: AsyncSession, rule: EditUrgencyRuleModel) -> ResponseUtil:
+        """编辑紧急度规则"""
+        try:
+            from module_redfish.dao.business_rule_dao import UrgencyRuleDao
+            # 检查规则是否存在
+            existing = await UrgencyRuleDao.get_urgency_rule_detail(db, rule.rule_id)
+            if not existing:
+                return ResponseUtil.failure(msg="紧急度规则不存在")
+            
+            # 如果修改了业务类型或硬件类型，检查是否与其他规则冲突
+            if rule.business_type or rule.hardware_type:
+                business_type = rule.business_type or existing.business_type
+                hardware_type = rule.hardware_type or existing.hardware_type
+                
+                if await UrgencyRuleDao.check_urgency_rule_exists(db, business_type, hardware_type, rule.rule_id):
+                    return ResponseUtil.failure(msg="该业务类型和硬件类型的规则已存在")
+            
+            success = await UrgencyRuleDao.edit_urgency_rule(db, rule)
+            if success:
+                logger.info(f"成功编辑紧急度规则: {rule.rule_id}")
+                return ResponseUtil.success(msg="编辑紧急度规则成功")
+            else:
+                return ResponseUtil.failure(msg="编辑紧急度规则失败")
+        except Exception as e:
+            logger.error(f"编辑紧急度规则失败: {str(e)}")
+            return ResponseUtil.failure(msg="编辑紧急度规则失败")
+
+    @classmethod
+    async def delete_urgency_rule_services(cls, db: AsyncSession, rule_ids: List[int]) -> ResponseUtil:
+        """删除紧急度规则"""
+        try:
+            from module_redfish.dao.business_rule_dao import UrgencyRuleDao
+            if not rule_ids:
+                return ResponseUtil.failure(msg="请选择要删除的紧急度规则")
+            
+            success = await UrgencyRuleDao.delete_urgency_rules(db, rule_ids)
+            if success:
+                logger.info(f"成功删除紧急度规则: {rule_ids}")
+                return ResponseUtil.success(msg="删除紧急度规则成功")
+            else:
+                return ResponseUtil.failure(msg="删除紧急度规则失败")
+        except Exception as e:
+            logger.error(f"删除紧急度规则失败: {str(e)}")
+            return ResponseUtil.failure(msg="删除紧急度规则失败") 

@@ -51,13 +51,13 @@ class AlertUrgencyService:
             business_type = device_info.business_type
             hostname = device_info.hostname
             
-            # 2. 根据业务类型和硬件类型查询紧急度规则
+            # 2. 根据业务类型和硬件类型查询紧急度规则（支持大小写不敏感匹配）
             rule_result = await db.execute(
                 select(BusinessHardwareUrgencyRules)
                 .where(
                     and_(
                         BusinessHardwareUrgencyRules.business_type == business_type,
-                        BusinessHardwareUrgencyRules.hardware_type == component_type,
+                        BusinessHardwareUrgencyRules.hardware_type == component_type.upper(),
                         BusinessHardwareUrgencyRules.is_active == 1
                     )
                 )
