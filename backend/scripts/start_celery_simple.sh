@@ -32,4 +32,9 @@ echo "   - 看到 'Successfully connected to Redfish service' 表示设备连接
 echo ""
 
 # 启动worker (前台运行，使用线程池避免macOS fork问题)
-python3 -m celery -A module_redfish.celery_config worker --loglevel=info --concurrency=2 --pool=threads 
+# 生成唯一的节点名称避免重复警告
+NODE_NAME="redfish_dev_$(hostname)_$(date +%s)"
+echo "🏷️  节点名称: $NODE_NAME"
+echo ""
+
+python3 -m celery -A module_redfish.celery_config worker --loglevel=info --concurrency=2 --pool=threads --hostname=$NODE_NAME 

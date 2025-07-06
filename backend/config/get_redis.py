@@ -1,3 +1,4 @@
+import redis
 from redis import asyncio as aioredis
 from redis.exceptions import AuthenticationError, TimeoutError, RedisError
 from config.database import AsyncSessionLocal
@@ -5,6 +6,23 @@ from config.env import RedisConfig
 from module_admin.service.config_service import ConfigService
 from module_admin.service.dict_service import DictDataService
 from utils.log_util import logger
+
+
+def get_redis() -> redis.Redis:
+    """
+    获取同步Redis连接（用于Celery任务）
+    
+    Returns:
+        redis.Redis: Redis连接对象
+    """
+    return redis.Redis(
+        host=RedisConfig.redis_host,
+        port=RedisConfig.redis_port,
+        username=RedisConfig.redis_username,
+        password=RedisConfig.redis_password,
+        db=RedisConfig.redis_database,
+        decode_responses=True
+    )
 
 
 class RedisUtil:

@@ -15,6 +15,10 @@ class WebSocketService {
     this.isConnecting = false
     this.shouldReconnect = true
     
+    // 消息去重缓存
+    this.messageCache = new Map()
+    this.cacheTimeout = 5000 // 5秒缓存时间
+    
     // 获取WebSocket URL
     this.wsUrl = this.getWebSocketUrl()
   }
@@ -98,6 +102,12 @@ class WebSocketService {
     try {
       const message = JSON.parse(event.data)
       console.log('[WebSocket] 📥 接收消息:', message)
+      
+      // 检查消息是否重复
+      if (this.isDuplicateMessage(message)) {
+        console.log('[WebSocket] ⚠️ 跳过重复消息:', message.type, message.timestamp)
+        return
+      }
       
       // 根据消息类型分发处理
       this.handleMessage(message)
@@ -191,6 +201,32 @@ class WebSocketService {
   }
 
   /**
+   * 检查消息是否重复
+   */
+  isDuplicateMessage(message) {
+    // 对于监控相关的消息，使用timestamp和type作为唯一标识
+    if (message.type === 'monitoring_started' || message.type === 'monitoring_completed' || message.type === 'monitor_task') {
+      const messageKey = `${message.type}_${message.timestamp}`
+      
+      if (this.messageCache.has(messageKey)) {
+        return true // 重复消息
+      }
+      
+      // 添加到缓存
+      this.messageCache.set(messageKey, true)
+      
+      // 设置过期清理
+      setTimeout(() => {
+        this.messageCache.delete(messageKey)
+      }, this.cacheTimeout)
+      
+      return false // 新消息
+    }
+    
+    return false // 其他类型消息不做去重
+  }
+
+  /**
    * 处理不同类型的消息
    */
   handleMessage(message) {
@@ -203,6 +239,10 @@ class WebSocketService {
         
       case 'device_status_change':
         this.handleDeviceStatusChange(message)
+        break
+        
+      case 'monitoring_started':
+        this.handleMonitoringStarted(message)
         break
         
       case 'monitoring_completed':
@@ -317,19 +357,19 @@ class WebSocketService {
   }
 
   /**
+   * 处理监控开始
+   */
+  handleMonitoringStarted(message) {
+    console.log('[WebSocket] 监控开始:', message)
+    this.emitEvent('monitoring_started', message)
+  }
+
+  /**
    * 处理监控完成
    */
   handleMonitoringCompleted(message) {
     console.log('[WebSocket] 监控完成:', message)
     this.emitEvent('monitoring_completed', message)
-    
-    const results = message.results || message
-    ElNotification({
-      title: '监控完成',
-      message: `设备监控已完成: 总计 ${results.total_devices} 台设备，成功 ${results.success_count} 台`,
-      type: 'success',
-      duration: 3000
-    })
   }
 
   /**
@@ -444,15 +484,7 @@ class WebSocketService {
    * 处理监控任务消息
    */
   handleMonitorTask(message) {
-    if (message.action === 'manual_triggered') {
-      ElNotification({
-        title: '监控触发',
-        message: '手动监控任务已成功触发',
-        type: 'success',
-        duration: 2000
-      })
-    }
-    
+    // 移除重复通知，由dashboard组件统一处理
     this.emitEvent('monitor_task', message)
   }
 

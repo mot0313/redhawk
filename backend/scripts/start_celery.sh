@@ -22,17 +22,21 @@ mkdir -p $LOG_DIR
 # 函数：启动Celery Worker
 start_worker() {
     echo "启动Celery Worker..."
+    # 生成唯一的节点名称，包含主机名和时间戳
+    NODE_NAME="redfish_worker_$(hostname)_$(date +%s)"
+    
     python3 -m celery -A module_redfish.celery_config worker \
         --loglevel=info \
         --concurrency=4 \
         --pool=threads \
         --queues=default,monitoring,batch,maintenance \
+        --hostname=$NODE_NAME \
         --logfile=$LOG_DIR/worker.log \
         --pidfile=$LOG_DIR/worker.pid \
         --detach
     
     if [ $? -eq 0 ]; then
-        echo "Celery Worker启动成功"
+        echo "Celery Worker启动成功 (节点名称: $NODE_NAME)"
     else
         echo "Celery Worker启动失败"
         exit 1

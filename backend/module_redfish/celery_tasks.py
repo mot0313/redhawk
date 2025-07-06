@@ -31,6 +31,71 @@ from config.env import RedisConfig
 # ===============================================================
 # 同步的Redis消息发布工具
 # ===============================================================
+def check_batch_completion(batch_id: str, task_success: bool = True):
+    """
+    检查批次任务是否全部完成
+    
+    Args:
+        batch_id: 批次ID
+        task_success: 当前任务是否成功
+    """
+    try:
+        from config.get_redis import get_redis
+        redis_client = get_redis()
+        
+        counter_key = f"monitoring_batch:{batch_id}:counter"
+        total_key = f"monitoring_batch:{batch_id}:total"
+        success_key = f"monitoring_batch:{batch_id}:success"
+        failed_key = f"monitoring_batch:{batch_id}:failed"
+        
+        # 原子性增加计数器
+        current_count = redis_client.incr(counter_key)
+        total_count = int(redis_client.get(total_key) or 0)
+        
+        # 更新成功/失败计数器
+        if task_success:
+            redis_client.incr(success_key)
+        else:
+            redis_client.incr(failed_key)
+        
+        logger.info(f"Batch {batch_id}: {current_count}/{total_count} tasks completed")
+        
+        # 如果所有任务都完成了，发送完成通知
+        if current_count >= total_count:
+            logger.info(f"All monitoring tasks completed for batch {batch_id}")
+            
+            # 获取成功和失败统计
+            successful_devices = int(redis_client.get(success_key) or 0)
+            failed_devices = int(redis_client.get(failed_key) or 0)
+            
+            # 推送监控完成通知
+            message = {
+                "type": "monitoring_completed",
+                "action": "monitoring_completed",
+                "results": {
+                    "success": True,
+                    "message": f"Monitoring completed for {total_count} devices",
+                    "total_devices": total_count,
+                    "successful_devices": successful_devices,
+                    "failed_devices": failed_devices,
+                    "batch_id": batch_id,
+                    "timestamp": datetime.now().isoformat()
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # 使用同步Redis发布（只发送到dashboard频道，避免重复）
+            publish_sync_redis_message("websocket:dashboard", message)
+            
+            logger.info(f"Pushed monitoring completed notification: {total_count} devices ({successful_devices} success, {failed_devices} failed)")
+            
+            # 清理Redis计数器
+            redis_client.delete(counter_key, total_key, success_key, failed_key)
+            
+    except Exception as e:
+        logger.error(f"Error checking batch completion for {batch_id}: {str(e)}")
+
+
 def publish_sync_redis_message(channel: str, message: dict):
     """
     一个同步的函数，用于从Celery任务中向Redis发布消息。
@@ -95,6 +160,12 @@ def monitor_single_device(self, device_info: Dict[str, Any]) -> Dict[str, Any]:
                 logger.warning("No event loop running, skipping WebSocket push")
         
         logger.info(f"Completed monitoring task for device: {device_info.get('hostname', 'Unknown')}")
+        
+        # 检查是否是批次任务，如果是则更新计数器
+        batch_id = device_info.get('batch_id')
+        if batch_id:
+            check_batch_completion(batch_id, result['success'])
+        
         return result
         
     except Exception as e:
@@ -149,32 +220,62 @@ def monitor_all_devices() -> Dict[str, Any]:
             }
             device_list.append(device_dict)
         
-        # 创建并发任务组
-        job = group(monitor_single_device.s(device) for device in device_list)
+        # 生成批次ID
+        import uuid
+        batch_id = str(uuid.uuid4())
+        
+        # 在Redis中设置计数器，用于跟踪任务完成情况
+        from config.get_redis import get_redis
+        redis_client = get_redis()
+        counter_key = f"monitoring_batch:{batch_id}:counter"
+        total_key = f"monitoring_batch:{batch_id}:total"
+        success_key = f"monitoring_batch:{batch_id}:success"
+        failed_key = f"monitoring_batch:{batch_id}:failed"
+        
+        # 设置总任务数和当前完成数
+        redis_client.set(total_key, len(devices), ex=3600)  # 1小时过期
+        redis_client.set(counter_key, 0, ex=3600)
+        redis_client.set(success_key, 0, ex=3600)
+        redis_client.set(failed_key, 0, ex=3600)
+        
+        # 创建任务组，为每个任务传递batch_id
+        enhanced_device_list = []
+        for device in device_list:
+            enhanced_device = device.copy()
+            enhanced_device['batch_id'] = batch_id
+            enhanced_device_list.append(enhanced_device)
+        
+        job = group(monitor_single_device.s(device) for device in enhanced_device_list)
         result = job.apply_async()
         
-        # 等待所有任务完成（设置超时时间）
-        results = result.get(timeout=600)  # 10分钟超时
+        logger.info(f"Submitted {len(devices)} monitoring tasks, batch ID: {batch_id}")
         
-        # 统计结果
-        success_count = sum(1 for r in results if r.get('success', False))
-        failed_count = len(results) - success_count
-        
-        logger.info(f"Batch monitoring completed: {success_count} success, {failed_count} failed")
-        
+        # 创建任务提交的结果
         batch_result = {
             "success": True,
-            "message": f"Monitoring completed for {len(devices)} devices",
+            "message": f"Monitoring tasks submitted for {len(devices)} devices",
             "total_devices": len(devices),
-            "success_count": success_count,
-            "failed_count": failed_count,
-            "results": results,
+            "batch_id": batch_id,
             "timestamp": datetime.now().isoformat()
         }
         
-        # 推送批量监控完成通知
-        # TODO: 需要实现监控完成推送方法
-        logger.info("Batch monitoring completed, TODO: implement push notification")
+        # 推送批量监控开始通知
+        try:
+            # 发送WebSocket通知，通知前端监控已开始
+            message = {
+                "type": "monitoring_started",
+                "action": "monitoring_started", 
+                "results": batch_result,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # 使用同步Redis发布，因为这是在同步任务中（只发送到dashboard频道，避免重复）
+            publish_sync_redis_message("websocket:dashboard", message)
+            
+            logger.info(f"Pushed monitoring started notification: {len(devices)} devices")
+            
+        except Exception as e:
+            logger.error(f"Error pushing monitoring started notification: {str(e)}")
         
         return batch_result
         
@@ -185,6 +286,7 @@ def monitor_all_devices() -> Dict[str, Any]:
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
+
 
 
 @celery_app.task(name='cleanup_old_logs')
@@ -269,10 +371,10 @@ def save_monitoring_result(result: Dict[str, Any], device_info: Dict[str, Any]):
             logger.error(f"Device with id {device_id} not found in database.")
             return
             
-            old_health_status = device.health_status
-            device.last_check_time = datetime.now()
-            device.health_status = result.get('overall_health', 'unknown')
-            new_health_status = device.health_status
+        old_health_status = device.health_status
+        device.last_check_time = datetime.now()
+        device.health_status = result.get('overall_health', 'unknown')
+        new_health_status = device.health_status
 
         # 2. 状态对比与逻辑处理
         all_monitored_components = result.get('all_components', [])

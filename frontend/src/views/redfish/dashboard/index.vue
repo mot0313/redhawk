@@ -572,6 +572,23 @@ const handleDeviceStatusChange = (data) => {
   }
 }
 
+const handleMonitoringStarted = (data) => {
+  // 只在未监控状态时显示通知，避免重复
+  const wasMonitoring = monitoringProgress.value.isMonitoring
+  
+  // 设置监控开始状态
+  monitoringProgress.value.isMonitoring = true
+  monitoringProgress.value.completed = 0
+  monitoringProgress.value.total = data.results?.total_devices || 0
+  monitoringProgress.value.progress = 0
+  monitoringProgress.value.currentDevice = '监控已开始...'
+  
+  // 只在首次开始时显示通知，避免重复
+  if (!wasMonitoring) {
+    ElMessage.success(`开始监控 ${data.results?.total_devices || 0} 台设备`)
+  }
+}
+
 const handleMonitoringCompleted = (data) => {
   // 重置监控进度
   monitoringProgress.value.isMonitoring = false
@@ -586,6 +603,23 @@ const handleMonitoringCompleted = (data) => {
   loadScheduledAlerts()
   loadTrendChart()
   loadHealthChart()
+  
+  // 显示监控完成通知
+  const totalDevices = data.results?.total_devices || 0
+  const successDevices = data.results?.successful_devices || 0
+  const failedDevices = data.results?.failed_devices || 0
+  
+  let message = `监控完成：${totalDevices} 台设备`
+  if (failedDevices > 0) {
+    message += ` (${successDevices} 成功, ${failedDevices} 失败)`
+  }
+  
+  ElNotification({
+    title: '监控完成',
+    message: message,
+    type: failedDevices > 0 ? 'warning' : 'success',
+    duration: 4000
+  })
 }
 
 const handleMonitoringProgress = (data) => {
@@ -774,6 +808,7 @@ const setupWebSocketListeners = () => {
   websocketService.on('connection', handleWebSocketConnection)
   websocketService.on('new_alert', handleAlert)
   websocketService.on('device_status_change', handleDeviceStatusChange)
+  websocketService.on('monitoring_started', handleMonitoringStarted)
   websocketService.on('monitoring_completed', handleMonitoringCompleted)
   websocketService.on('monitoring_progress', handleMonitoringProgress)
   websocketService.on('dashboard_update', handleDashboardUpdate)
@@ -790,6 +825,7 @@ const cleanupWebSocketListeners = () => {
   websocketService.off('connection', handleWebSocketConnection)
   websocketService.off('new_alert', handleAlert)
   websocketService.off('device_status_change', handleDeviceStatusChange)
+  websocketService.off('monitoring_started', handleMonitoringStarted)
   websocketService.off('monitoring_completed', handleMonitoringCompleted)
   websocketService.off('monitoring_progress', handleMonitoringProgress)
   websocketService.off('dashboard_update', handleDashboardUpdate)
@@ -808,20 +844,16 @@ const triggerManualMonitoring = async () => {
     const response = await triggerMonitor(false)
     
     if (response.success) {
-      ElMessage.success('监控任务已成功触发')
+      // 移除重复通知，监控开始时会有专门的通知
+      // ElMessage.success('监控任务已成功触发')
       
       // 设置监控中状态
       monitoringProgress.value.isMonitoring = true
       monitoringProgress.value.progress = 0
       monitoringProgress.value.currentDevice = '准备开始...'
       
-      // 如果WebSocket连接正常，也发送WebSocket消息
-      if (wsConnected.value) {
-        websocketService.send({
-          type: 'manual_monitor',
-          force: false
-        })
-      }
+      // 移除WebSocket触发，避免重复执行
+      // WebSocket连接主要用于接收监控状态更新，不用于触发监控
     } else {
       ElMessage.error(response.msg || '触发监控失败')
     }
@@ -840,6 +872,17 @@ onMounted(() => {
   
   // 设置WebSocket事件监听
   setupWebSocketListeners()
+  
+  // 主动检查WebSocket连接状态
+  wsConnected.value = websocketService.isConnected()
+  
+  // 如果未连接，尝试重新连接
+  if (!wsConnected.value) {
+    console.log('[Dashboard] WebSocket未连接，尝试重新连接...')
+    websocketService.connect()
+  } else {
+    console.log('[Dashboard] WebSocket已连接')
+  }
 });
 
   onUnmounted(() => {
