@@ -14,16 +14,6 @@
       </el-col>
       <el-col :span="1.5">
         <el-button
-          type="warning"
-          plain
-          icon="Close"
-          :disabled="multiple"
-          @click="handleBatchIgnore"
-          v-hasPermi="['redfish:alert:ignore']"
-        >批量忽略</el-button>
-      </el-col>
-      <el-col :span="1.5">
-        <el-button
           type="info"
           plain
           icon="Download"
@@ -87,10 +77,10 @@
             <el-option label="网络" value="network" />
           </el-select>
         </el-form-item>
-        <el-form-item label="告警级别" prop="alertLevel">
+        <el-form-item label="紧急程度" prop="urgencyLevel">
           <el-select
-            v-model="queryParams.alertLevel"
-          placeholder="告警级别"
+            v-model="queryParams.urgencyLevel"
+          placeholder="紧急程度"
             clearable
           style="width: 100px"
           >
@@ -98,16 +88,15 @@
             <el-option label="择期" value="scheduled" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态" prop="alertStatus">
+        <el-form-item label="告警状态" prop="alertStatus">
           <el-select
             v-model="queryParams.alertStatus"
-          placeholder="状态"
+          placeholder="告警状态"
             clearable
           style="width: 100px"
           >
             <el-option label="活跃" value="active" />
             <el-option label="已解决" value="resolved" />
-            <el-option label="已忽略" value="ignored" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -165,18 +154,18 @@
           </template>
         </el-table-column>
       <el-table-column
-        label="告警级别"
+        label="紧急程度"
         align="center"
-        key="alertLevel"
+        key="urgencyLevel"
         width="100"
         v-if="columns[3].visible"
       >
           <template #default="scope">
             <el-tag
-              :type="scope.row.alertLevel === 'urgent' ? 'danger' : 'warning'"
+              :type="scope.row.urgencyLevel === 'urgent' ? 'danger' : 'warning'"
               effect="dark"
             >
-              {{ scope.row.alertLevel === 'urgent' ? '紧急' : '择期' }}
+              {{ scope.row.urgencyLevel === 'urgent' ? '紧急' : '择期' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -214,19 +203,10 @@
           <template #default="scope">
             <div>
               <div class="text-sm">首次：{{ parseTime(scope.row.firstOccurrence, '{y}-{m}-{d} {h}:{i}') }}</div>
-              <div class="text-sm text-gray-500">最新：{{ parseTime(scope.row.lastOccurrence, '{y}-{m}-{d} {h}:{i}') }}</div>
+              <div class="text-sm text-gray-500" v-if="scope.row.lastOccurrence">
+                最新：{{ parseTime(scope.row.lastOccurrence, '{y}-{m}-{d} {h}:{i}') }}
+              </div>
             </div>
-          </template>
-        </el-table-column>
-      <el-table-column
-        label="发生次数"
-        align="center"
-        key="occurrenceCount"
-        width="80"
-        v-if="columns[7].visible"
-      >
-          <template #default="scope">
-            <el-badge :value="scope.row.occurrenceCount" class="item" />
           </template>
         </el-table-column>
       <el-table-column
@@ -234,7 +214,7 @@
         align="center"
         key="alertStatus"
         width="80"
-        v-if="columns[8].visible"
+        v-if="columns[7].visible"
       >
           <template #default="scope">
             <el-tag
@@ -250,7 +230,7 @@
         align="center"
         width="200"
         fixed="right"
-        v-if="columns[9].visible"
+        v-if="columns[8].visible"
       >
           <template #default="scope">
             <el-button
@@ -266,13 +246,6 @@
               icon="Check"
               @click="handleResolve(scope.row)"
             >解决</el-button>
-            <el-button
-              v-if="scope.row.alertStatus === 'active'"
-              link
-              type="warning"
-              icon="Close"
-              @click="handleIgnore(scope.row)"
-            >忽略</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -298,9 +271,14 @@
         <el-descriptions-item label="业务IP">{{ alertDetail.businessIp }}</el-descriptions-item>
         <el-descriptions-item label="组件类型">{{ alertDetail.componentType }}</el-descriptions-item>
         <el-descriptions-item label="组件名称">{{ alertDetail.componentName }}</el-descriptions-item>
-        <el-descriptions-item label="告警级别">
-          <el-tag :type="alertDetail.alertLevel === 'urgent' ? 'danger' : 'warning'">
-            {{ alertDetail.alertLevel === 'urgent' ? '紧急' : '择期' }}
+        <el-descriptions-item label="紧急程度">
+          <el-tag :type="alertDetail.urgencyLevel === 'urgent' ? 'danger' : 'warning'">
+            {{ alertDetail.urgencyLevel === 'urgent' ? '紧急' : '择期' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="健康状态">
+          <el-tag :type="getHealthStatusType(alertDetail.healthStatus)">
+            {{ getHealthStatusText(alertDetail.healthStatus) }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="当前状态">
@@ -329,16 +307,8 @@
       :close-on-click-modal="false"
     >
       <el-form ref="resolveRef" :model="resolveForm" :rules="resolveRules" label-width="100px">
-        <el-form-item label="解决人" prop="resolvedBy">
-          <el-input v-model="resolveForm.resolvedBy" placeholder="请输入解决人" />
-        </el-form-item>
-        <el-form-item label="解决备注" prop="resolvedNote">
-          <el-input
-            v-model="resolveForm.resolvedNote"
-            type="textarea"
-            :rows="4"
-            placeholder="请输入解决备注"
-          />
+        <el-form-item label="操作人" prop="operator">
+          <el-input v-model="resolveForm.operator" placeholder="请输入操作人" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -349,42 +319,18 @@
       </template>
     </el-dialog>
 
-    <!-- 忽略告警弹窗 -->
-    <el-dialog
-      title="忽略告警"
-      v-model="ignoreVisible"
-      width="500px"
-      :close-on-click-modal="false"
-    >
-      <el-form ref="ignoreRef" :model="ignoreForm" :rules="ignoreRules" label-width="100px">
-        <el-form-item label="操作人" prop="operator">
-          <el-input v-model="ignoreForm.operator" placeholder="请输入操作人" />
-        </el-form-item>
-        <el-form-item label="忽略原因" prop="ignoreReason">
-          <el-input
-            v-model="ignoreForm.ignoreReason"
-            type="textarea"
-            :rows="4"
-            placeholder="请输入忽略原因"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="ignoreVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitIgnore">确定</el-button>
-        </div>
-      </template>
-    </el-dialog>
+
+
+    <!-- 精简版移除忽略告警功能 -->
   </div>
 </template>
 
 <script setup name="AlertManagement">
+import { ref, onMounted, getCurrentInstance } from 'vue'
 import { 
   getAlertList, 
   getAlertDetail, 
-  resolveAlerts, 
-  ignoreAlerts,
+  resolveAlerts,
   exportAlerts
 } from '@/api/redfish/alert'
 import { parseTime } from '@/utils/ruoyi'
@@ -405,13 +351,12 @@ const columns = ref([
   { key: 0, label: `序号`, visible: true },
   { key: 1, label: `设备信息`, visible: true },
   { key: 2, label: `组件信息`, visible: true },
-  { key: 3, label: `告警级别`, visible: true },
+  { key: 3, label: `紧急程度`, visible: true },
   { key: 4, label: `健康状态`, visible: true },
   { key: 5, label: `告警消息`, visible: true },
   { key: 6, label: `发生时间`, visible: true },
-  { key: 7, label: `发生次数`, visible: true },
-  { key: 8, label: `状态`, visible: true },
-  { key: 9, label: `操作`, visible: true }
+  { key: 7, label: `状态`, visible: true },
+  { key: 8, label: `操作`, visible: true }
 ])
 
 // 查询参数
@@ -421,14 +366,13 @@ const queryParams = ref({
   hostname: null,
   businessIp: null,
   componentType: null,
-  alertLevel: null,
+  urgencyLevel: null,
   alertStatus: null
 })
 
 // 弹窗状态
 const detailVisible = ref(false)
 const resolveVisible = ref(false)
-const ignoreVisible = ref(false)
 
 // 详情数据
 const alertDetail = ref(null)
@@ -436,28 +380,19 @@ const alertDetail = ref(null)
 // 表单数据
 const resolveForm = ref({
   alertIds: '',
-  resolvedBy: '',
-  resolvedNote: ''
+  operator: ''
 })
 
-const ignoreForm = ref({
-  alertIds: '',
-  operator: '',
-  ignoreReason: ''
-})
+
 
 // 表单验证规则
 const resolveRules = {
-  resolvedBy: [
-    { required: true, message: "解决人不能为空", trigger: "blur" }
-  ]
-}
-
-const ignoreRules = {
   operator: [
     { required: true, message: "操作人不能为空", trigger: "blur" }
   ]
 }
+
+
 
 /** 查询告警列表 */
 function getList() {
@@ -494,7 +429,7 @@ function resetQuery() {
     hostname: null,
     businessIp: null,
     componentType: null,
-    alertLevel: null,
+    urgencyLevel: null,
     alertStatus: null
   }
   handleQuery()
@@ -526,8 +461,7 @@ function handleDetail(row) {
 function handleResolve(row) {
   resolveForm.value = {
     alertIds: row.alertId.toString(),
-    resolvedBy: '',
-    resolvedNote: ''
+    operator: ''
   }
   resolveVisible.value = true
 }
@@ -536,11 +470,7 @@ function handleResolve(row) {
 function submitResolve() {
   proxy.$refs["resolveRef"].validate(valid => {
     if (valid) {
-      const data = {
-        ...resolveForm.value,
-        resolvedTime: new Date()
-      }
-      resolveAlerts(data).then(() => {
+      resolveAlerts(resolveForm.value).then(() => {
         proxy.$modal.msgSuccess("解决成功")
         resolveVisible.value = false
         getList()
@@ -552,35 +482,9 @@ function submitResolve() {
   })
 }
 
-/** 忽略告警 */
-function handleIgnore(row) {
-  ignoreForm.value = {
-    alertIds: row.alertId.toString(),
-    operator: '',
-    ignoreReason: ''
-  }
-  ignoreVisible.value = true
-}
 
-/** 提交忽略 */
-function submitIgnore() {
-  proxy.$refs["ignoreRef"].validate(valid => {
-    if (valid) {
-      const data = {
-        ...ignoreForm.value,
-        operationTime: new Date()
-      }
-      ignoreAlerts(data).then(() => {
-        proxy.$modal.msgSuccess("忽略成功")
-        ignoreVisible.value = false
-        getList()
-      }).catch(error => {
-        console.error('忽略告警失败:', error)
-        proxy.$modal.msgError("忽略告警失败，请检查后端服务是否正常")
-      })
-    }
-  })
-}
+
+// 精简版移除忽略告警功能
 
 /** 批量解决 */
 function handleBatchResolve() {
@@ -590,24 +494,9 @@ function handleBatchResolve() {
   }
   resolveForm.value = {
     alertIds: ids.value.join(','),
-    resolvedBy: '',
-    resolvedNote: ''
+    operator: ''
   }
   resolveVisible.value = true
-}
-
-/** 批量忽略 */
-function handleBatchIgnore() {
-  if (ids.value.length === 0) {
-    proxy.$modal.msgError("请选择要忽略的告警")
-    return
-  }
-  ignoreForm.value = {
-    alertIds: ids.value.join(','),
-    operator: '',
-    ignoreReason: ''
-  }
-  ignoreVisible.value = true
 }
 
 /** 导出 */
@@ -627,7 +516,7 @@ function getHealthStatusType(status) {
   const statusMap = {
     'OK': 'success',
     'Warning': 'warning', 
-    'Critical': 'danger',
+    'Critical': 'warning',  // 简化分类：Critical合并到warning
     'Unknown': 'info'
   }
   return statusMap[status] || 'info'
@@ -638,7 +527,7 @@ function getHealthStatusText(status) {
   const statusMap = {
     'OK': '正常',
     'Warning': '警告',
-    'Critical': '严重',
+    'Critical': '警告',  // 简化分类：Critical显示为警告
     'Unknown': '未知'
   }
   return statusMap[status] || status

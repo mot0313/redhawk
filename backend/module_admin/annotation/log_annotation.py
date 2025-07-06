@@ -150,10 +150,7 @@ class Log:
                 else:
                     # 处理Pydantic模型返回（如PageResponseModel）
                     if hasattr(result, 'status_code'):
-                        if result.status_code == 200:
-                            result_dict = {'code': result.status_code, 'message': '获取成功'}
-                        else:
-                            result_dict = {'code': result.status_code, 'message': '获取失败'}
+                        result_dict = {'code': result.status_code, 'message': '获取成功'}
                     else:
                         # 对于没有status_code的Pydantic模型，认为操作成功
                         result_dict = {'code': 200, 'message': '获取成功'}

@@ -6,15 +6,12 @@ import os
 from celery import Celery
 from kombu import Queue
 
-# 从环境变量获取Redis配置
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-REDIS_PORT = os.getenv('REDIS_PORT', '6379')
-REDIS_DB_BROKER = os.getenv('REDIS_DB_BROKER', '1')
-REDIS_DB_BACKEND = os.getenv('REDIS_DB_BACKEND', '2')
+# 导入统一的Redis配置
+from config.env import RedisConfig
 
-# 构建Redis URL
-BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_BROKER}'
-RESULT_BACKEND = f'redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_BACKEND}'
+# 使用统一的配置构建Redis URL
+BROKER_URL = f"redis://{RedisConfig.redis_username}:{RedisConfig.redis_password}@{RedisConfig.redis_host}:{RedisConfig.redis_port}/1"
+RESULT_BACKEND = f"redis://{RedisConfig.redis_username}:{RedisConfig.redis_password}@{RedisConfig.redis_host}:{RedisConfig.redis_port}/2"
 
 # Celery应用配置
 def make_celery():

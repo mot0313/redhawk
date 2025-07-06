@@ -325,7 +325,7 @@ async def batch_update_alert_urgency(
         return ResponseUtil.success(data=result, msg='批量更新告警紧急度成功')
     except Exception as e:
         logger.error(f'批量更新告警紧急度失败: {str(e)}')
-        return ResponseUtil.failure(msg='批量更新告警紧急度失败')
+        return ResponseUtil.failure(msg='批量更新告警紧急度失败') 
 
 
 # ==================== 业务类型管理 ====================

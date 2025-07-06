@@ -19,6 +19,7 @@ from module_redfish.entity.vo.business_rule_vo import (
 from utils.response_util import ResponseUtil
 from utils.page_util import PageResponseModel
 from utils.log_util import logger
+from module_redfish.celery_tasks import recalculate_urgency_for_rule_change
 
 
 class BusinessRuleService:
@@ -384,7 +385,7 @@ class BusinessRuleService:
                 categorized[category] = []
             categorized[category].append(ht)
         
-        return categorized
+        return categorized 
 
     # ==================== 业务类型管理方法 ====================
     
@@ -721,7 +722,12 @@ class BusinessRuleService:
             success = await UrgencyRuleDao.add_urgency_rule(db, rule)
             if success:
                 logger.info(f"成功添加紧急度规则: {rule.business_type} - {rule.hardware_type}")
-                return ResponseUtil.success(msg="添加紧急度规则成功")
+
+                # 触发后台任务
+                recalculate_urgency_for_rule_change.delay(rule.business_type, rule.hardware_type)
+                logger.info(f"为规则 {rule.business_type}-{rule.hardware_type} 触发紧急度重新计算任务")
+
+                return ResponseUtil.success(msg="添加规则成功")
             else:
                 return ResponseUtil.failure(msg="添加紧急度规则失败")
         except Exception as e:
@@ -731,45 +737,64 @@ class BusinessRuleService:
     @classmethod
     async def edit_urgency_rule_services(cls, db: AsyncSession, rule: EditUrgencyRuleModel) -> ResponseUtil:
         """编辑紧急度规则"""
-        try:
-            from module_redfish.dao.business_rule_dao import UrgencyRuleDao
-            # 检查规则是否存在
-            existing = await UrgencyRuleDao.get_urgency_rule_detail(db, rule.rule_id)
-            if not existing:
-                return ResponseUtil.failure(msg="紧急度规则不存在")
+        existing_rule = await BusinessRuleDao.get_urgency_rule_by_id(db, rule.rule_id)
+        if not existing_rule:
+            return ResponseUtil.failure(msg="规则不存在")
             
-            # 如果修改了业务类型或硬件类型，检查是否与其他规则冲突
-            if rule.business_type or rule.hardware_type:
-                business_type = rule.business_type or existing.business_type
-                hardware_type = rule.hardware_type or existing.hardware_type
-                
-                if await UrgencyRuleDao.check_urgency_rule_exists(db, business_type, hardware_type, rule.rule_id):
+        # 检查是否与其他规则冲突
+        business_type = rule.business_type or existing_rule.business_type
+        hardware_type = rule.hardware_type or existing_rule.hardware_type
+        if await BusinessRuleDao.check_urgency_rule_exists(db, business_type, hardware_type, rule.rule_id):
                     return ResponseUtil.failure(msg="该业务类型和硬件类型的规则已存在")
             
-            success = await UrgencyRuleDao.edit_urgency_rule(db, rule)
+        # 记录旧的规则信息，用于触发任务
+        old_business_type = existing_rule.business_type
+        old_hardware_type = existing_rule.hardware_type
+
+        try:
+            success = await BusinessRuleDao.edit_urgency_rule(db, rule)
             if success:
                 logger.info(f"成功编辑紧急度规则: {rule.rule_id}")
-                return ResponseUtil.success(msg="编辑紧急度规则成功")
+                
+                # 触发旧规则相关告警的更新
+                recalculate_urgency_for_rule_change.delay(old_business_type, old_hardware_type)
+                logger.info(f"为旧规则 {old_business_type}-{old_hardware_type} 触发紧急度重新计算任务")
+                # 如果业务或硬件类型被更改，还需要触发新规则相关告警的更新
+                if business_type != old_business_type or hardware_type != old_hardware_type:
+                    recalculate_urgency_for_rule_change.delay(business_type, hardware_type)
+                    logger.info(f"为新规则 {business_type}-{hardware_type} 触发紧急度重新计算任务")
+
+                return ResponseUtil.success(msg="编辑规则成功")
             else:
-                return ResponseUtil.failure(msg="编辑紧急度规则失败")
+                return ResponseUtil.failure(msg="编辑规则失败")
         except Exception as e:
             logger.error(f"编辑紧急度规则失败: {str(e)}")
-            return ResponseUtil.failure(msg="编辑紧急度规则失败")
+            return ResponseUtil.failure(msg="编辑规则失败")
 
     @classmethod
     async def delete_urgency_rule_services(cls, db: AsyncSession, rule_ids: List[int]) -> ResponseUtil:
         """删除紧急度规则"""
-        try:
-            from module_redfish.dao.business_rule_dao import UrgencyRuleDao
-            if not rule_ids:
-                return ResponseUtil.failure(msg="请选择要删除的紧急度规则")
+        if not rule_ids:
+            return ResponseUtil.failure(msg="请选择要删除的规则")
             
-            success = await UrgencyRuleDao.delete_urgency_rules(db, rule_ids)
+        # 在删除前获取规则信息
+        rules_to_delete = await BusinessRuleDao.get_urgency_rules_by_ids(db, rule_ids)
+        if not rules_to_delete:
+            return ResponseUtil.failure(msg="规则不存在或已被删除")
+
+        try:
+            success = await BusinessRuleDao.delete_urgency_rule(db, rule_ids)
             if success:
                 logger.info(f"成功删除紧急度规则: {rule_ids}")
-                return ResponseUtil.success(msg="删除紧急度规则成功")
+
+                # 为每条被删除的规则触发后台任务
+                for rule in rules_to_delete:
+                    recalculate_urgency_for_rule_change.delay(rule.business_type, rule.hardware_type)
+                    logger.info(f"为已删除的规则 {rule.business_type}-{rule.hardware_type} 触发紧急度重新计算任务")
+
+                return ResponseUtil.success(msg="删除规则成功")
             else:
-                return ResponseUtil.failure(msg="删除紧急度规则失败")
+                return ResponseUtil.failure(msg="删除规则失败")
         except Exception as e:
             logger.error(f"删除紧急度规则失败: {str(e)}")
-            return ResponseUtil.failure(msg="删除紧急度规则失败") 
+            return ResponseUtil.failure(msg="删除规则失败") 

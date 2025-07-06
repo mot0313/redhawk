@@ -1,4 +1,4 @@
-from config.database import async_engine, AsyncSessionLocal, Base
+from config.database import async_engine, AsyncSessionLocal, Base, engine, SessionLocal
 from utils.log_util import logger
 
 
@@ -10,6 +10,19 @@ async def get_db():
     """
     async with AsyncSessionLocal() as current_db:
         yield current_db
+
+
+def get_sync_db():
+    """
+    获取同步数据库会话（用于Celery任务）
+    
+    :return:
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 async def init_create_table():

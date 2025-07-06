@@ -26,6 +26,8 @@ export function resolveAlerts(data) {
   })
 }
 
+
+
 // 忽略告警
 export function ignoreAlerts(data) {
   return request({

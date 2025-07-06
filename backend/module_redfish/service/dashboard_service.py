@@ -16,6 +16,7 @@ from module_redfish.entity.vo.dashboard_vo import (
 )
 from utils.response_util import ResponseUtil
 from utils.log_util import logger
+from module_redfish.service.connectivity_service import ConnectivityService
 
 
 class DashboardService:
@@ -35,10 +36,23 @@ class DashboardService:
             query_model: 查询模型
             
         Returns:
-            DashboardOverviewModel: 概览数据
+            DashboardOverviewModel: 首页概览数据
         """
         # 获取设备统计
         device_stats = await DeviceDao.get_device_statistics(db)
+        
+        # 获取设备健康状态分布
+        health_distribution = await cls._get_device_health_distribution(db)
+        
+        # 将critical设备合并到warning中
+        combined_warning_devices = health_distribution['warning'] + health_distribution['critical']
+        
+        # 获取基于业务IP的真实在线/离线设备统计
+        connectivity_stats = await ConnectivityService.get_connectivity_statistics(
+            db, use_cache=True, cache_ttl_minutes=5
+        )
+        online_devices = connectivity_stats.get('online_devices', 0)
+        offline_devices = connectivity_stats.get('offline_devices', 0)
         
         # 获取7天告警统计
         alert_stats_7d = await AlertDao.get_alert_statistics(db, 7)
@@ -46,34 +60,27 @@ class DashboardService:
         # 获取30天告警统计
         alert_stats_30d = await AlertDao.get_alert_statistics(db, 30)
         
-        # 当前紧急告警数和择期告警数
+        # 获取当前告警统计
         current_urgent_alerts = await cls._get_current_alert_count(db, 'urgent')
         current_scheduled_alerts = await cls._get_current_alert_count(db, 'scheduled')
-        
-        # 设备健康状态统计
-        # 基于健康状态统计设备
-        healthy_devices = device_stats['healthy_devices']
-        unhealthy_devices = device_stats['unhealthy_devices']
-        
-        # 获取详细的健康状态分布
-        health_distribution = await cls._get_device_health_distribution(db)
+
         
         return DashboardOverviewModel(
-            total_devices=device_stats['total_devices'],
-            online_devices=device_stats['healthy_devices'],  # 使用健康设备数表示在线
-            offline_devices=unhealthy_devices,               # 使用不健康设备数表示离线
-            healthy_devices=health_distribution['ok'],
-            warning_devices=health_distribution['warning'],
-            critical_devices=health_distribution['critical'],
-            alerts_7days=alert_stats_7d['total_alerts'],
-            urgent_alerts_7days=alert_stats_7d['urgent_alerts'],
-            scheduled_alerts_7days=alert_stats_7d['scheduled_alerts'],
-            alerts_30days=alert_stats_30d['total_alerts'],
-            urgent_alerts_30days=alert_stats_30d['urgent_alerts'],
-            scheduled_alerts_30days=alert_stats_30d['scheduled_alerts'],
-            current_urgent_alerts=current_urgent_alerts,
-            current_scheduled_alerts=current_scheduled_alerts,
-            last_update_time=datetime.now()
+            totalDevices=device_stats['total_devices'],
+            onlineDevices=online_devices,        # 基于业务IP连通性的在线设备数
+            offlineDevices=offline_devices,      # 基于业务IP连通性的离线设备数
+            healthyDevices=health_distribution['ok'],
+            warningDevices=combined_warning_devices,
+            criticalDevices=0,  # 不再使用critical分类，设为0
+            alerts7Days=alert_stats_7d['total_alerts'],
+            urgentAlerts7Days=alert_stats_7d['urgent_alerts'],
+            scheduledAlerts7Days=alert_stats_7d['scheduled_alerts'],
+            alerts30Days=alert_stats_30d['total_alerts'],
+            urgentAlerts30Days=alert_stats_30d['urgent_alerts'],
+            scheduledAlerts30Days=alert_stats_30d['scheduled_alerts'],
+            currentUrgentAlerts=current_urgent_alerts,
+            currentScheduledAlerts=current_scheduled_alerts,
+            lastUpdateTime=datetime.now()
         )
     
     @classmethod
@@ -101,9 +108,9 @@ class DashboardService:
         
         return AlertTrendChartModel(
             dates=dates,
-            urgent_counts=urgent_counts,
-            scheduled_counts=scheduled_counts,
-            total_counts=total_counts
+            urgentCounts=urgent_counts,
+            scheduledCounts=scheduled_counts,
+            totalCounts=total_counts
         )
     
     @classmethod
@@ -124,25 +131,25 @@ class DashboardService:
         health_distribution = await cls._get_device_health_distribution(db)
         
         healthy_count = health_distribution['ok']
-        warning_count = health_distribution['warning']
-        critical_count = health_distribution['critical']
+        # 将critical合并到warning中
+        warning_count = health_distribution['warning'] + health_distribution['critical']
         offline_count = health_distribution['unknown']
         
-        # 按组件类型统计健康状态
+        # 按组件类型统计健康状态（不再包含critical分类）
         component_health = {
-            'Processor': {'healthy': 0, 'warning': 0, 'critical': 0},
-            'Memory': {'healthy': 0, 'warning': 0, 'critical': 0},
-            'Storage': {'healthy': 0, 'warning': 0, 'critical': 0},
-            'Power': {'healthy': 0, 'warning': 0, 'critical': 0},
-            'Thermal': {'healthy': 0, 'warning': 0, 'critical': 0}
+            'Processor': {'healthy': 0, 'warning': 0},
+            'Memory': {'healthy': 0, 'warning': 0},
+            'Storage': {'healthy': 0, 'warning': 0},
+            'Power': {'healthy': 0, 'warning': 0},
+            'Thermal': {'healthy': 0, 'warning': 0}
         }
         
         return DeviceHealthChartModel(
-            healthy_count=healthy_count,
-            warning_count=warning_count,
-            critical_count=critical_count,
-            offline_count=offline_count,
-            component_health=component_health
+            healthyCount=healthy_count,
+            warningCount=warning_count,
+            criticalCount=0,  # 不再使用critical分类，设为0
+            offlineCount=offline_count,
+            componentHealth=component_health
         )
     
     @classmethod
@@ -166,25 +173,26 @@ class DashboardService:
         result = []
         for alert in alerts:
             # 计算持续时间
-            duration = cls._calculate_duration(alert.first_occurrence)
+            duration = cls._calculate_duration(alert['first_occurrence'])
             
             # 获取设备位置信息
             # TODO: 可以优化为一次查询获取所有设备信息
             from module_redfish.dao.device_dao import DeviceDao
-            device = await DeviceDao.get_device_by_id(db, alert.device_id)
+            device = await DeviceDao.get_device_by_id(db, alert['device_id'])
             location = device.location if device else "Unknown"
             
             result.append(RealtimeAlertListModel(
-                device_id=alert.device_id,
-                hostname=alert.hostname,
-                business_ip=alert.business_ip,
+                deviceId=alert['device_id'],
+                hostname=alert['hostname'],
+                businessIp=alert['business_ip'],
                 location=location,
-                component_type=alert.component_type,
-                component_name=alert.component_name,
-                health_status=alert.health_status,
-                alert_level=alert.alert_level,
-                alert_message=alert.alert_message,
-                last_occurrence=alert.last_occurrence,
+                componentType=alert['component_type'],
+                componentName=alert['component_name'],
+                healthStatus=alert['health_status'],
+                urgencyLevel=alert['urgency_level'],
+                alertMessage="",  # 优化版DAO中没有alert_message字段
+                firstOccurrence=alert['first_occurrence'],
+                lastOccurrence=alert['last_occurrence'],
                 duration=duration
             ))
         
@@ -212,26 +220,25 @@ class DashboardService:
         for alert in alerts:
             # 获取设备位置信息
             from module_redfish.dao.device_dao import DeviceDao
-            device = await DeviceDao.get_device_by_id(db, alert.device_id)
+            device = await DeviceDao.get_device_by_id(db, alert['device_id'])
             location = device.location if device else "Unknown"
             
-            # 计算优先级评分（基于发生次数和时间）
-            priority_score = alert.occurrence_count * 10
-            if alert.first_occurrence < datetime.now() - timedelta(days=7):
-                priority_score += 50  # 超过7天的告警增加优先级
+            # 计算优先级评分（基于时间）
+            priorityScore = 10  # 基础分数
+            if alert['first_occurrence'] < datetime.now() - timedelta(days=7):
+                priorityScore += 50  # 超过7天的告警增加优先级
             
             result.append(ScheduledAlertListModel(
-                device_id=alert.device_id,
-                hostname=alert.hostname,
-                business_ip=alert.business_ip,
+                deviceId=alert['device_id'],
+                hostname=alert['hostname'],
+                businessIp=alert['business_ip'],
                 location=location,
-                component_type=alert.component_type,
-                component_name=alert.component_name,
-                health_status=alert.health_status,
-                alert_message=alert.alert_message,
-                first_occurrence=alert.first_occurrence,
-                occurrence_count=alert.occurrence_count,
-                priority_score=priority_score
+                componentType=alert['component_type'],
+                componentName=alert['component_name'],
+                healthStatus=alert['health_status'],
+                urgencyLevel=alert['urgency_level'],
+                firstOccurrence=alert['first_occurrence'],
+                priorityScore=priorityScore
             ))
         
         return result
@@ -261,38 +268,38 @@ class DashboardService:
             # 这里需要从最新的监控数据中获取设备的健康状态
             
             # 暂时使用模拟数据
-            overall_health = "OK"
-            power_state = "On"
-            processor_health = "OK"
-            memory_health = "OK"
-            storage_health = "OK"
-            thermal_health = "OK"
-            power_health = "OK"
+            overallHealth = "OK"
+            powerState = "On"
+            processorHealth = "OK"
+            memoryHealth = "OK"
+            storageHealth = "OK"
+            thermalHealth = "OK"
+            powerHealth = "OK"
             
             # 获取设备的告警数量
-            device_alerts = await AlertService.get_device_alerts_services(db, device.device_id)
-            alert_count = len(device_alerts)
+            deviceAlerts = await AlertService.get_device_alerts_services(db, device.device_id)
+            alertCount = len(deviceAlerts)
             
             # 设备连接状态
-            connection_status = "Connected"  # 暂时硬编码
+            connectionStatus = "Connected"  # 暂时硬编码
             
             result.append(DeviceHealthSummaryListModel(
-                device_id=device.device_id,
+                deviceId=device.device_id,
                 hostname=device.hostname,
-                business_ip=device.business_ip,
+                businessIp=device.business_ip,
                 location=device.location or "Unknown",
                 manufacturer=device.manufacturer or "Unknown",
                 model=device.model or "Unknown",
-                overall_health=overall_health,
-                power_state=power_state,
-                processor_health=processor_health,
-                memory_health=memory_health,
-                storage_health=storage_health,
-                thermal_health=thermal_health,
-                power_health=power_health,
-                alert_count=alert_count,
-                last_check_time=datetime.now(),  # 暂时使用当前时间
-                connection_status=connection_status
+                overallHealth=overallHealth,
+                powerState=powerState,
+                processorHealth=processorHealth,
+                memoryHealth=memoryHealth,
+                storageHealth=storageHealth,
+                thermalHealth=thermalHealth,
+                powerHealth=powerHealth,
+                alertCount=alertCount,
+                lastCheckTime=datetime.now(),  # 暂时使用当前时间
+                connectionStatus=connectionStatus
             ))
         
         return result
@@ -315,26 +322,26 @@ class DashboardService:
         alert_stats = await AlertDao.get_alert_statistics(db, 1)  # 当天告警
         
         # TODO: 实现真实的系统健康指标计算
-        total_monitoring_points = device_stats['monitoring_devices'] * 5  # 假设每个设备5个监控点
-        healthy_points = total_monitoring_points - alert_stats['active_alerts']
-        warning_points = alert_stats['active_alerts']
-        critical_points = 0  # 暂时没有严重告警的概念
-        unavailable_points = device_stats['inactive_devices'] * 5
+        totalMonitoringPoints = device_stats['monitoring_devices'] * 5  # 假设每个设备5个监控点
+        healthyPoints = totalMonitoringPoints - alert_stats['active_alerts']
+        warningPoints = alert_stats['active_alerts']
+        criticalPoints = 0  # 暂时没有严重告警的概念
+        unavailablePoints = device_stats['inactive_devices'] * 5
         
-        health_percentage = (healthy_points / total_monitoring_points * 100) if total_monitoring_points > 0 else 100
-        availability_percentage = ((total_monitoring_points - unavailable_points) / total_monitoring_points * 100) if total_monitoring_points > 0 else 100
+        healthPercentage = (healthyPoints / totalMonitoringPoints * 100) if totalMonitoringPoints > 0 else 100
+        availabilityPercentage = ((totalMonitoringPoints - unavailablePoints) / totalMonitoringPoints * 100) if totalMonitoringPoints > 0 else 100
         
         return SystemHealthMetricsModel(
-            total_monitoring_points=total_monitoring_points,
-            healthy_points=healthy_points,
-            warning_points=warning_points,
-            critical_points=critical_points,
-            unavailable_points=unavailable_points,
-            health_percentage=round(health_percentage, 2),
-            availability_percentage=round(availability_percentage, 2),
-            avg_response_time=1.5,  # 模拟数据
-            monitoring_success_rate=98.5,  # 模拟数据
-            last_calculation_time=datetime.now()
+            totalMonitoringPoints=totalMonitoringPoints,
+            healthyPoints=healthyPoints,
+            warningPoints=warningPoints,
+            criticalPoints=criticalPoints,
+            unavailablePoints=unavailablePoints,
+            healthPercentage=round(healthPercentage, 2),
+            availabilityPercentage=round(availabilityPercentage, 2),
+            avgResponseTime=1.5,  # 模拟数据
+            monitoringSuccessRate=98.5,  # 模拟数据
+            lastCalculationTime=datetime.now()
         )
     
     @classmethod
@@ -355,9 +362,9 @@ class DashboardService:
         """
         # 解析时间范围
         days = 7
-        if query_model.time_range == "30d":
+        if query_model.timeRange == "30d":
             days = 30
-        elif query_model.time_range == "90d":
+        elif query_model.timeRange == "90d":
             days = 90
         
         # 并行获取各种数据
@@ -372,13 +379,13 @@ class DashboardService:
         
         return DashboardDataModel(
             overview=overview,
-            alert_trend=alert_trend,
-            device_health_chart=device_health_chart,
-            realtime_alerts=realtime_alerts,
-            scheduled_alerts=scheduled_alerts,
-            device_health_summary=device_health_summary,
-            alert_distribution=alert_distribution,
-            system_metrics=system_metrics
+            alertTrend=alert_trend,
+            deviceHealthChart=device_health_chart,
+            realtimeAlerts=realtime_alerts,
+            scheduledAlerts=scheduled_alerts,
+            deviceHealthSummary=device_health_summary,
+            alertDistribution=alert_distribution,
+            systemMetrics=system_metrics
         )
     
     @classmethod
@@ -415,13 +422,13 @@ class DashboardService:
         }
 
     @classmethod
-    async def _get_current_alert_count(cls, db: AsyncSession, alert_level: str) -> int:
+    async def _get_current_alert_count(cls, db: AsyncSession, urgency_level: str) -> int:
         """
-        获取当前指定级别的告警数量
+        获取当前指定紧急程度的告警数量
         
         Args:
             db: 数据库会话
-            alert_level: 告警级别
+            urgency_level: 紧急程度
             
         Returns:
             int: 告警数量
@@ -433,7 +440,7 @@ class DashboardService:
             select(func.count(AlertInfo.alert_id)).where(
                 and_(
                     AlertInfo.alert_status == 'active',
-                    AlertInfo.alert_level == alert_level
+                    AlertInfo.urgency_level == urgency_level
                 )
             )
         )

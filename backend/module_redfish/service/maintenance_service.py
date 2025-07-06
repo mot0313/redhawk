@@ -226,7 +226,7 @@ class MaintenanceService:
             if update_data.component_name:
                 update_fields['component_name'] = update_data.component_name
             if update_data.urgency_level:
-                update_fields['alert_level'] = update_data.urgency_level  # 映射到alert_level字段
+                update_fields['urgency_level'] = update_data.urgency_level
             if update_data.scheduled_date:
                 update_fields['resolved_time'] = update_data.scheduled_date  # 映射到resolved_time字段
             
@@ -557,7 +557,7 @@ class MaintenanceService:
             'businessType': alert.device.business_type if alert.device else '',
             'componentType': alert.component_type,
             'componentName': alert.component_name,
-            'urgencyLevel': alert.alert_level,
+            'urgencyLevel': alert.urgency_level,
             'scheduledDate': alert.resolved_time,
             'responsiblePerson': MaintenanceDao._extract_responsible_person(alert.resolution_note) or (alert.device.system_owner if alert.device else None),
             'maintenanceType': 'repair',  # 默认为维修

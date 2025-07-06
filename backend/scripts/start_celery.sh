@@ -22,9 +22,10 @@ mkdir -p $LOG_DIR
 # 函数：启动Celery Worker
 start_worker() {
     echo "启动Celery Worker..."
-    celery -A module_redfish.celery_tasks worker \
+    python3 -m celery -A module_redfish.celery_config worker \
         --loglevel=info \
         --concurrency=4 \
+        --pool=threads \
         --queues=default,monitoring,batch,maintenance \
         --logfile=$LOG_DIR/worker.log \
         --pidfile=$LOG_DIR/worker.pid \
@@ -41,7 +42,7 @@ start_worker() {
 # 函数：启动Celery Beat
 start_beat() {
     echo "启动Celery Beat调度器..."
-    celery -A module_redfish.celery_tasks beat \
+    python3 -m celery -A module_redfish.celery_config beat \
         --loglevel=info \
         --logfile=$LOG_DIR/beat.log \
         --pidfile=$LOG_DIR/beat.pid \
@@ -58,12 +59,12 @@ start_beat() {
 # 函数：启动Flower监控
 start_flower() {
     echo "启动Flower监控界面..."
-    celery -A module_redfish.celery_tasks flower \
+    python3 -m celery -A module_redfish.celery_config flower \
         --port=5555 \
         --broker=redis://$REDIS_HOST:$REDIS_PORT/$REDIS_DB_BROKER \
         --logfile=$LOG_DIR/flower.log \
         --pidfile=$LOG_DIR/flower.pid \
-        --detach
+        --detach \
     
     if [ $? -eq 0 ]; then
         echo "Flower监控界面启动成功，访问地址: http://localhost:5555"

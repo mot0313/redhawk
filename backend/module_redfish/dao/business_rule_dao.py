@@ -315,7 +315,7 @@ class BusinessRuleDao:
             rule.update_time = datetime.now()
         
         await db.commit()
-        return True
+        return True 
 
 
 class BusinessTypeDao:

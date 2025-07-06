@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from module_redfish.dao.alert_dao import AlertDao
 from module_redfish.entity.vo.alert_vo import (
-    AlertPageQueryModel, AlertManualOverrideModel, AlertResolveModel, AlertIgnoreModel,
+    AlertPageQueryModel, AlertResolveModel,
     AlertStatisticsModel, AlertTrendModel, RealtimeAlertModel, ScheduledAlertModel,
     AlertDistributionModel
 )
@@ -70,41 +70,13 @@ class AlertService:
         if not alert:
             return ResponseUtil.failure(msg="告警不存在")
         
-        return ResponseUtil.success(data=alert)
-    
-    @classmethod
-    async def manual_override_alert_services(
-        cls,
-        db: AsyncSession,
-        override_model: AlertManualOverrideModel
-    ) -> ResponseUtil:
-        """
-        手动覆盖告警级别
+        # 转换为驼峰命名
+        from utils.common_util import CamelCaseUtil
+        alert_camel = CamelCaseUtil.transform_result([alert])[0] if alert else alert
         
-        Args:
-            db: 数据库会话
-            override_model: 覆盖模型
-            
-        Returns:
-            ResponseUtil: 响应结果
-        """
-        try:
-            success = await AlertDao.manual_override_alert(
-                db,
-                override_model.alert_id,
-                override_model.manual_level,
-                override_model.manual_reason,
-                override_model.manual_operator
-            )
-            
-            if success:
-                logger.info(f"成功手动覆盖告警级别: {override_model.alert_id} -> {override_model.manual_level}")
-                return ResponseUtil.success(msg="手动覆盖告警级别成功")
-            else:
-                return ResponseUtil.failure(msg="手动覆盖告警级别失败")
-        except Exception as e:
-            logger.error(f"手动覆盖告警级别失败: {str(e)}")
-            return ResponseUtil.failure(msg="手动覆盖告警级别失败")
+        return ResponseUtil.success(data=alert_camel)
+    
+    # 精简版移除手动覆盖功能
     
     @classmethod
     async def resolve_alerts_services(
@@ -131,8 +103,7 @@ class AlertService:
             success = await AlertDao.resolve_alerts(
                 db,
                 alert_ids,
-                resolve_model.resolved_by,
-                resolve_model.resolved_note
+                resolve_model.operator
             )
             
             if success:
@@ -144,43 +115,7 @@ class AlertService:
             logger.error(f"解决告警失败: {str(e)}")
             return ResponseUtil.failure(msg="解决告警失败")
     
-    @classmethod
-    async def ignore_alerts_services(
-        cls,
-        db: AsyncSession,
-        ignore_model: AlertIgnoreModel
-    ) -> ResponseUtil:
-        """
-        忽略告警
-        
-        Args:
-            db: 数据库会话
-            ignore_model: 忽略模型
-            
-        Returns:
-            ResponseUtil: 响应结果
-        """
-        alert_ids = [int(id_str) for id_str in ignore_model.alert_ids.split(',') if id_str]
-        
-        if not alert_ids:
-            return ResponseUtil.failure(msg="请选择要忽略的告警")
-        
-        try:
-            success = await AlertDao.ignore_alerts(
-                db,
-                alert_ids,
-                ignore_model.operator,
-                ignore_model.ignore_reason
-            )
-            
-            if success:
-                logger.info(f"成功忽略告警: {alert_ids}")
-                return ResponseUtil.success(msg="忽略告警成功")
-            else:
-                return ResponseUtil.failure(msg="忽略告警失败")
-        except Exception as e:
-            logger.error(f"忽略告警失败: {str(e)}")
-            return ResponseUtil.failure(msg="忽略告警失败")
+    # 精简版移除忽略告警功能
     
     @classmethod
     async def get_alert_statistics_services(cls, db: AsyncSession, days: int = 7) -> AlertStatisticsModel:
@@ -245,14 +180,14 @@ class AlertService:
         
         return [
             RealtimeAlertModel(
-                device_id=alert.device_id,
-                hostname=alert.hostname,
-                business_ip=alert.business_ip,
-                component_type=alert.component_type,
-                component_name=alert.component_name,
-                health_status=alert.health_status,
-                alert_level=alert.alert_level,
-                last_occurrence=alert.last_occurrence
+                device_id=alert['device_id'],
+                hostname=alert['hostname'],
+                business_ip=alert['business_ip'],
+                component_type=alert['component_type'],
+                component_name=alert['component_name'],
+                health_status=alert['health_status'],
+                urgency_level=alert['urgency_level'],
+                last_occurrence=alert['last_occurrence']
             )
             for alert in alerts
         ]
@@ -273,15 +208,15 @@ class AlertService:
         
         return [
             ScheduledAlertModel(
-                device_id=alert.device_id,
-                hostname=alert.hostname,
-                business_ip=alert.business_ip,
-                component_type=alert.component_type,
-                component_name=alert.component_name,
-                health_status=alert.health_status,
-                alert_message=alert.alert_message,
-                first_occurrence=alert.first_occurrence,
-                occurrence_count=alert.occurrence_count
+                device_id=alert['device_id'],
+                hostname=alert['hostname'],
+                business_ip=alert['business_ip'],
+                component_type=alert['component_type'],
+                component_name=alert['component_name'],
+                health_status=alert['health_status'],
+                alert_message="",  # 优化版DAO中没有alert_message字段
+                first_occurrence=alert['first_occurrence'],
+                occurrence_count=1  # 优化版DAO中没有occurrence_count字段，使用默认值
             )
             for alert in alerts
         ]
@@ -300,10 +235,10 @@ class AlertService:
         distribution = await AlertDao.get_alert_distribution(db)
         
         return AlertDistributionModel(
-            by_level=distribution['by_level'],
-            by_component=distribution['by_component'],
-            by_location=distribution['by_location'],
-            by_manufacturer=distribution['by_manufacturer']
+            byLevel=distribution['by_level'],
+            byComponent=distribution['by_component'],
+            byLocation=distribution['by_location'],
+            byManufacturer=distribution['by_manufacturer']
         )
     
     @classmethod
@@ -315,7 +250,7 @@ class AlertService:
         component_name: str,
         health_status: str,
         alert_message: str,
-        alert_level: str
+        urgency_level: str
     ) -> Optional[int]:
         """
         创建或更新告警（由监控系统调用）
@@ -327,7 +262,7 @@ class AlertService:
             component_name: 组件名称
             health_status: 健康状态
             alert_message: 告警消息
-            alert_level: 告警级别
+            urgency_level: 紧急程度
             
         Returns:
             Optional[int]: 告警ID
@@ -374,7 +309,7 @@ class AlertService:
                 'component_type': alert.component_type,
                 'component_name': alert.component_name,
                 'health_status': alert.health_status,
-                'alert_level': alert.alert_level,
+                'urgency_level': alert.urgency_level,
                 'alert_message': alert.alert_message,
                 'first_occurrence': alert.first_occurrence,
                 'last_occurrence': alert.last_occurrence,

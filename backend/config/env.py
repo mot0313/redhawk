@@ -68,7 +68,7 @@ class RedisSettings(BaseSettings):
     redis_host: str = '127.0.0.1'
     redis_port: int = 6379
     redis_username: str = ''
-    redis_password: str = ''
+    redis_password: str = 'Ww123456'
     redis_database: int = 2
 
 
@@ -224,6 +224,9 @@ class GetConfig:
         """
         if 'uvicorn' in sys.argv[0]:
             # 使用uvicorn启动时，命令行参数需要按照uvicorn的文档进行配置，无法自定义参数
+            pass
+        elif 'celery' in sys.argv[0] or any('celery' in arg for arg in sys.argv):
+            # 使用celery启动时，跳过参数解析以避免冲突
             pass
         else:
             # 使用argparse定义命令行参数

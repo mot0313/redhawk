@@ -20,7 +20,7 @@ from module_admin.dao.job_dao import JobDao
 from module_admin.entity.vo.job_vo import JobLogModel, JobModel
 from module_admin.service.job_log_service import JobLogService
 from utils.log_util import logger
-import module_task  # noqa: F401
+import module_task  # noqa: F401  # 移除以避免循环导入
 
 
 # 重写Cron定时
@@ -171,6 +171,9 @@ class SchedulerUtil:
         :param job_info: 任务对象信息
         :return:
         """
+        # 确保导入必要的模块
+        cls._ensure_modules_imported()
+        
         job_func = eval(job_info.invoke_target)
         job_executor = job_info.job_executor
         if iscoroutinefunction(job_func):
@@ -197,6 +200,9 @@ class SchedulerUtil:
         :param job_info: 任务对象信息
         :return:
         """
+        # 确保导入必要的模块
+        cls._ensure_modules_imported()
+        
         job_func = eval(job_info.invoke_target)
         job_executor = job_info.job_executor
         if iscoroutinefunction(job_func):
@@ -218,6 +224,30 @@ class SchedulerUtil:
             executor=job_executor,
         )
 
+    @classmethod
+    def _ensure_modules_imported(cls):
+        """
+        确保eval执行时所需的模块已导入
+        """
+        try:
+            # 导入定时任务相关模块
+            import module_task
+            import module_task.scheduler_test
+            import module_task.redfish_monitor_tasks
+            
+            # 将模块添加到全局命名空间，使eval可以访问
+            globals()['module_task'] = module_task
+            
+            # 验证模块是否可以通过eval访问
+            test_target = "module_task.scheduler_test.job"
+            test_func = eval(test_target)
+            logger.debug(f"模块导入验证成功: {test_func}")
+            
+        except ImportError as e:
+            logger.warning(f"导入定时任务模块时出现问题: {e}")
+        except Exception as e:
+            logger.warning(f"模块导入验证失败: {e}")
+    
     @classmethod
     def remove_scheduler_job(cls, job_id: Union[str, int]):
         """

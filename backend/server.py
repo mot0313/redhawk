@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from config.env import AppConfig
 from config.get_db import init_create_table
 from config.get_redis import RedisUtil
@@ -29,6 +29,11 @@ from module_redfish.controller.business_rule_controller import businessRuleContr
 from module_redfish.controller.dashboard_controller import dashboardController
 from module_redfish.controller.duty_controller import duty_controller
 from module_redfish.controller.maintenance_controller import maintenanceController
+from module_redfish.controller.connectivity_controller import connectivityController
+from module_redfish.controller.websocket_controller import WebSocketController
+from module_redfish.controller.monitor_config_controller import app3_monitor_config
+from module_redfish.websocket_manager import init_websocket_manager, cleanup_websocket_manager
+from module_task.redfish_monitor_tasks import RedfishSchedulerTasks
 from sub_applications.handle import handle_sub_applications
 from utils.common_util import worship
 from utils.log_util import logger
@@ -44,10 +49,20 @@ async def lifespan(app: FastAPI):
     await RedisUtil.init_sys_dict(app.state.redis)
     await RedisUtil.init_sys_config(app.state.redis)
     await SchedulerUtil.init_system_scheduler()
+    
+    # 初始化WebSocket管理器
+    await init_websocket_manager()
+    
+    # 初始化Redfish监控任务
+    await RedfishSchedulerTasks.init_monitoring_tasks()
+    
     logger.info(f'{AppConfig.app_name}启动成功')
     yield
     await RedisUtil.close_redis_pool(app)
     await SchedulerUtil.close_system_scheduler()
+    
+    # 清理WebSocket管理器
+    await cleanup_websocket_manager()
 
 
 # 初始化FastAPI对象
@@ -91,7 +106,22 @@ controller_list = [
     {'router': dashboardController, 'tags': ['Redfish-首页数据']},
     {'router': duty_controller, 'tags': ['Redfish-值班管理']},
     {'router': maintenanceController, 'tags': ['Redfish-硬件更换排期']},
+    {'router': connectivityController, 'tags': ['Redfish-连通性检测']},
+    {'router': app3_monitor_config, 'tags': ['Redfish-监控配置']},
 ]
 
 for controller in controller_list:
     app.include_router(router=controller.get('router'), tags=controller.get('tags'))
+
+
+# WebSocket路由
+@app.websocket("/ws/redfish")
+async def websocket_redfish_endpoint(websocket: WebSocket):
+    """Redfish实时监控WebSocket端点"""
+    await WebSocketController.handle_websocket_connection(websocket)
+
+
+@app.websocket("/ws/redfish/{user_id}")
+async def websocket_redfish_user_endpoint(websocket: WebSocket, user_id: str):
+    """Redfish实时监控WebSocket端点（带用户ID）"""
+    await WebSocketController.handle_websocket_connection(websocket, user_id)

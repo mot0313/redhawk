@@ -9,25 +9,18 @@ from module_admin.annotation.pydantic_annotation import as_query
 
 
 class AlertInfoModel(BaseModel):
-    """告警信息模型"""
+    """精简版告警信息模型（专注首页展示）"""
     alert_id: Optional[int] = Field(default=None, description="告警ID")
     device_id: int = Field(..., description="设备ID")
-    hostname: str = Field(..., description="主机名")
-    business_ip: str = Field(..., description="业务IP")
-    component_type: str = Field(..., description="组件类型")
-    component_name: str = Field(..., description="组件名称")
-    alert_level: str = Field(..., description="告警级别(urgent/scheduled)")
-    health_status: str = Field(..., description="健康状态")
-    alert_message: str = Field(..., description="告警消息")
+    hostname: Optional[str] = Field(default=None, description="主机名（来自device_info表）")
+    business_ip: Optional[str] = Field(default=None, description="业务IP（来自device_info表）")
+    component_type: str = Field(..., description="组件类型（首页展示核心字段）")
+    component_name: Optional[str] = Field(default=None, description="组件名称（首页展示）")
+    health_status: str = Field(..., description="健康状态（ok/warning/critical）")
+    urgency_level: str = Field(..., description="紧急程度（urgent/scheduled）")
+    alert_status: str = Field(default="active", description="告警状态（active/resolved）")
     first_occurrence: datetime = Field(..., description="首次发生时间")
-    last_occurrence: datetime = Field(..., description="最后发生时间")
-    occurrence_count: int = Field(default=1, description="发生次数")
-    is_manual_override: bool = Field(default=False, description="是否手动覆盖")
-    manual_level: Optional[str] = Field(default=None, description="手动设置级别")
-    manual_reason: Optional[str] = Field(default=None, description="手动设置原因")
-    manual_operator: Optional[str] = Field(default=None, description="手动操作人")
-    manual_time: Optional[datetime] = Field(default=None, description="手动操作时间")
-    alert_status: str = Field(default="active", description="状态(active/resolved/ignored)")
+    last_occurrence: Optional[datetime] = Field(default=None, description="最后发生时间")
     resolved_by: Optional[str] = Field(default=None, description="解决人")
     resolved_time: Optional[datetime] = Field(default=None, description="解决时间")
     resolved_note: Optional[str] = Field(default=None, description="解决备注")
@@ -36,16 +29,16 @@ class AlertInfoModel(BaseModel):
 
 
 class AlertQueryModel(BaseModel):
-    """告警查询模型"""
+    """精简版告警查询模型"""
     model_config = ConfigDict(alias_generator=to_camel)
     
     device_id: Optional[int] = Field(default=None, description="设备ID")
     hostname: Optional[str] = Field(default=None, description="主机名")
     business_ip: Optional[str] = Field(default=None, description="业务IP")
     component_type: Optional[str] = Field(default=None, description="组件类型")
-    alert_level: Optional[str] = Field(default=None, description="告警级别")
-    health_status: Optional[str] = Field(default=None, description="健康状态")
-    alert_status: Optional[str] = Field(default=None, description="状态")
+    urgency_level: Optional[str] = Field(default=None, description="紧急程度（urgent/scheduled）")
+    health_status: Optional[str] = Field(default=None, description="健康状态（ok/warning/critical）")
+    alert_status: Optional[str] = Field(default=None, description="告警状态（active/resolved）")
     start_time: Optional[datetime] = Field(default=None, description="开始时间")
     end_time: Optional[datetime] = Field(default=None, description="结束时间")
 
@@ -57,29 +50,11 @@ class AlertPageQueryModel(AlertQueryModel):
     page_size: int = Field(default=10, description="每页记录数")
 
 
-class AlertManualOverrideModel(BaseModel):
-    """告警手动覆盖模型"""
-    alert_id: int = Field(..., description="告警ID")
-    manual_level: str = Field(..., description="手动设置级别(urgent/scheduled)")
-    manual_reason: str = Field(..., description="手动设置原因")
-    manual_operator: str = Field(..., description="手动操作人")
-    manual_time: datetime = Field(..., description="手动操作时间")
-
-
 class AlertResolveModel(BaseModel):
-    """告警解决模型"""
+    """告警解决模型（精简版）"""
     alert_ids: str = Field(..., description="告警ID列表，逗号分隔")
-    resolved_by: str = Field(..., description="解决人")
     resolved_time: datetime = Field(..., description="解决时间")
-    resolved_note: Optional[str] = Field(default=None, description="解决备注")
-
-
-class AlertIgnoreModel(BaseModel):
-    """告警忽略模型"""
-    alert_ids: str = Field(..., description="告警ID列表，逗号分隔")
     operator: str = Field(..., description="操作人")
-    operation_time: datetime = Field(..., description="操作时间")
-    ignore_reason: Optional[str] = Field(default=None, description="忽略原因")
 
 
 class AlertStatisticsModel(BaseModel):
@@ -112,33 +87,35 @@ class DeviceHealthSummaryModel(BaseModel):
 
 
 class RealtimeAlertModel(BaseModel):
-    """实时告警模型"""
+    """实时告警模型（紧急告警首页展示）"""
     device_id: int = Field(..., description="设备ID")
     hostname: str = Field(..., description="主机名")
-    business_ip: str = Field(..., description="业务IP")
+    business_ip: Optional[str] = Field(default=None, description="业务IP")
     component_type: str = Field(..., description="组件类型")
-    component_name: str = Field(..., description="组件名称")
-    health_status: str = Field(..., description="健康状态")
-    alert_level: str = Field(..., description="告警级别")
-    last_occurrence: datetime = Field(..., description="最后发生时间")
+    component_name: Optional[str] = Field(default=None, description="组件名称")
+    health_status: str = Field(..., description="健康状态（ok/warning/critical）")
+    urgency_level: str = Field(..., description="紧急程度（urgent）")
+    first_occurrence: datetime = Field(..., description="首次发生时间")
 
 
 class ScheduledAlertModel(BaseModel):
-    """择期告警模型"""
+    """择期告警模型（择期告警首页展示）"""
     device_id: int = Field(..., description="设备ID")
     hostname: str = Field(..., description="主机名")
-    business_ip: str = Field(..., description="业务IP")
+    business_ip: Optional[str] = Field(default=None, description="业务IP")
     component_type: str = Field(..., description="组件类型")
-    component_name: str = Field(..., description="组件名称")
-    health_status: str = Field(..., description="健康状态")
-    alert_message: str = Field(..., description="告警消息")
+    component_name: Optional[str] = Field(default=None, description="组件名称")
+    health_status: str = Field(..., description="健康状态（ok/warning/critical）")
+    urgency_level: str = Field(..., description="紧急程度（scheduled）")
     first_occurrence: datetime = Field(..., description="首次发生时间")
-    occurrence_count: int = Field(..., description="发生次数")
 
 
 class AlertDistributionModel(BaseModel):
     """告警分布模型"""
-    by_level: dict = Field(..., description="按级别分布")
-    by_component: dict = Field(..., description="按组件类型分布")
-    by_location: dict = Field(..., description="按位置分布")
-    by_manufacturer: dict = Field(..., description="按制造商分布") 
+    byLevel: dict = Field(..., description="按级别分布")
+    byComponent: dict = Field(..., description="按组件类型分布")
+    byLocation: dict = Field(..., description="按位置分布")
+    byManufacturer: dict = Field(..., description="按制造商分布")
+
+
+ 

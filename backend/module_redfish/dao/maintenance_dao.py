@@ -58,7 +58,7 @@ class MaintenanceDao:
             conditions.append(AlertInfo.component_type.like(f'%{query_object.component_type}%'))
             
         if query_object.urgency_level:
-            conditions.append(AlertInfo.alert_level == query_object.urgency_level)
+            conditions.append(AlertInfo.urgency_level == query_object.urgency_level)
             
         # 处理前端传来的maintenance_status，映射到alert_status
         if query_object.maintenance_status:
@@ -170,7 +170,7 @@ class MaintenanceDao:
             alert_source='maintenance',
             component_type=component_type,
             component_name=component_name or component_type,
-            alert_level=urgency_level,
+            urgency_level=urgency_level,
             alert_type='maintenance',
             alert_message=description or f'{component_type}需要维护',
             alert_status='scheduled',
@@ -274,12 +274,12 @@ class MaintenanceDao:
         
         # 按紧急程度统计
         urgency_query = select(
-            AlertInfo.alert_level,
+            AlertInfo.urgency_level,
             func.count(AlertInfo.alert_id).label('count')
-        ).where(and_(*base_conditions)).group_by(AlertInfo.alert_level)
+        ).where(and_(*base_conditions)).group_by(AlertInfo.urgency_level)
         
         urgency_result = await db.execute(urgency_query)
-        urgency_stats = {row.alert_level: row.count for row in urgency_result}
+        urgency_stats = {row.urgency_level: row.count for row in urgency_result}
         
         # 逾期统计
         now = datetime.now()
@@ -353,7 +353,7 @@ class MaintenanceDao:
                     'hostname': schedule.device.hostname if schedule.device else '',
                     'component_type': schedule.component_type,
                     'component_name': schedule.component_name,
-                    'urgency_level': schedule.alert_level,
+                    'urgency_level': schedule.urgency_level,
                     'responsible_person': MaintenanceDao._extract_responsible_person(schedule.resolution_note),
                     'status': schedule.alert_status
                 }
@@ -362,11 +362,11 @@ class MaintenanceDao:
                 calendar_data[date_str]['total_count'] += 1
                 
                 # 按紧急程度计数
-                if schedule.alert_level == 'immediate':
+                if schedule.urgency_level == 'immediate':
                     calendar_data[date_str]['immediate_count'] += 1
-                elif schedule.alert_level == 'urgent':
+                elif schedule.urgency_level == 'urgent':
                     calendar_data[date_str]['urgent_count'] += 1
-                elif schedule.alert_level == 'scheduled':
+                elif schedule.urgency_level == 'scheduled':
                     calendar_data[date_str]['scheduled_count'] += 1
         
         return list(calendar_data.values())

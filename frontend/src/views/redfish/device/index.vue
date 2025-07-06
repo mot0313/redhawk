@@ -59,6 +59,23 @@
           v-hasPermi="['redfish:device:export']"
         >导出</el-button>
       </el-col>
+      <el-col :span="1.5">
+        <el-button
+          type="info"
+          plain
+          icon="Connection"
+          @click="handleBatchCheckConnectivity"
+          :disabled="multiple"
+        >批量检测连通性</el-button>
+      </el-col>
+      <el-col :span="1.5">
+        <el-button
+          type="warning"
+          plain
+          icon="DataAnalysis"
+          @click="handleGetConnectivityStats"
+        >连通性统计</el-button>
+      </el-col>
       <right-toolbar
         v-model:showSearch="showSearch"
         @queryTable="getList"
@@ -109,7 +126,6 @@
         >
           <el-option label="正常" value="ok" />
           <el-option label="警告" value="warning" />
-          <el-option label="严重" value="critical" />
           <el-option label="未知" value="unknown" />
         </el-select>
       </el-form-item>
@@ -132,6 +148,7 @@
 
 
     <el-table
+      ref="deviceListRef"
       v-loading="loading"
       :data="deviceList"
       @selection-change="handleSelectionChange"
@@ -247,16 +264,17 @@
       <el-table-column
         label="操作"
         align="center"
-        width="160"
+        width="280"
+        fixed="right"
         class-name="small-padding fixed-width"
       >
         <template #default="scope">
           <el-tooltip content="查看详情" placement="top">
             <el-button
               link
-              type="info"
+              type="primary"
               icon="View"
-              @click="handleDetail(scope.row)"
+              @click="handleUpdate(scope.row)"
               v-hasPermi="['redfish:device:query']"
             ></el-button>
           </el-tooltip>
@@ -267,6 +285,24 @@
               icon="Edit"
               @click="handleUpdate(scope.row)"
               v-hasPermi="['redfish:device:edit']"
+            ></el-button>
+          </el-tooltip>
+          <el-tooltip content="Redfish连接测试" placement="top">
+            <el-button
+              link
+              type="warning"
+              icon="Link"
+              @click="handleTestConnection(scope.row)"
+              v-hasPermi="['redfish:device:test']"
+            ></el-button>
+          </el-tooltip>
+          <el-tooltip content="业务IP连通性检测" placement="top">
+            <el-button
+              link
+              type="info"
+              icon="Connection"
+              @click="handleCheckConnectivity(scope.row)"
+              v-hasPermi="['redfish:device:test']"
             ></el-button>
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
@@ -490,14 +526,21 @@
 </template>
 
 <script setup name="Device">
+import { getCurrentInstance, onMounted, reactive, ref, toRefs } from 'vue'
 import { listDevice, getDevice, delDevice, addDevice, updateDevice, testConnectionById, changeMonitorStatus } from "@/api/redfish/device";
 import { getBusinessTypes } from "@/api/redfish/businessRule";
 import { parseTime } from "@/utils/ruoyi";
 import { getToken } from "@/utils/auth";
+import { 
+  checkDeviceConnectivity, 
+  batchCheckConnectivity,
+  getConnectivityStatistics 
+} from '@/api/redfish/connectivity'
 
 const { proxy } = getCurrentInstance();
 
 const deviceList = ref([]);
+const deviceListRef = ref(); // 添加表格ref
 const businessTypes = ref([]);
 const open = ref(false);
 const detailOpen = ref(false);
@@ -531,30 +574,17 @@ const data = reactive({
   queryParams: {
     pageNum: 1,
     pageSize: 10,
-    hostname: null,
-    businessIp: null,
-    oobIp: null,
-    healthStatus: null,
-    monitorEnabled: null
+    hostname: undefined,
+    businessIp: undefined,
+    oobIp: undefined,
+    healthStatus: undefined,
+    monitorEnabled: undefined
   },
   rules: {
-    hostname: [
-      { required: true, message: "主机名不能为空", trigger: "blur" }
-    ],
-    oobIp: [
-      { required: true, message: "带外IP地址不能为空", trigger: "blur" },
-      {
-        pattern: /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,
-        message: "请输入正确的IP地址格式",
-        trigger: "blur"
-      }
-    ],
-    location: [
-      { required: true, message: "机房位置不能为空", trigger: "blur" }
-    ],
-    oobPort: [
-      { required: true, message: "带外端口不能为空", trigger: "blur" }
-    ]
+    hostname: [{ required: true, message: '主机名不能为空', trigger: 'blur' }],
+    businessIp: [{ required: true, message: '业务IP不能为空', trigger: 'blur' }],
+    oobIp: [{ required: true, message: '带外IP不能为空', trigger: 'blur' }],
+    businessType: [{ required: true, message: '业务类型不能为空', trigger: 'change' }]
   }
 });
 
@@ -625,7 +655,7 @@ function reset() {
     businessIp: null,
     oobIp: null,
     oobPort: 443,
-    location: null,
+    location: '',
     operatingSystem: null,
     serialNumber: null,
     model: null,
@@ -786,7 +816,7 @@ function getHealthStatusType(status) {
   const statusMap = {
     'ok': 'success',
     'warning': 'warning', 
-    'critical': 'danger',
+    'critical': 'warning',  // 简化分类：critical合并到warning
     'unknown': 'info'
   };
   return statusMap[status] || 'info';
@@ -797,7 +827,7 @@ function getHealthStatusText(status) {
   const statusMap = {
     'ok': '正常',
     'warning': '警告',
-    'critical': '严重',
+    'critical': '警告',  // 简化分类：critical显示为警告
     'unknown': '未知'
   };
   return statusMap[status] || '未知';
@@ -831,6 +861,125 @@ function handleFileSuccess(response, file, fileList) {
 /** 提交上传文件 */
 function submitFileForm() {
   proxy.$refs["uploadRef"].submit();
+}
+
+// 检测单个设备连通性
+function handleCheckConnectivity(row) {
+  const loading = proxy.$modal.loading("正在检测设备连通性...")
+  
+  checkDeviceConnectivity(row.deviceId).then(response => {
+    proxy.$modal.closeLoading()
+    
+    if (response.data.online) {
+      proxy.$modal.msgSuccess(`设备 ${row.hostname} (${response.data.business_ip}) 连通性检测成功！
+
+检测详情：
+• Ping响应时间: ${response.data.ping?.response_time || 'N/A'}
+• 检测耗时: ${response.data.check_duration_ms?.toFixed(1)}ms
+• 检测时间: ${new Date(response.data.check_time).toLocaleString()}`)
+    } else {
+      let errorInfo = `设备 ${row.hostname} (${response.data.business_ip}) 连通性检测失败！
+      
+错误信息：
+• Ping错误: ${response.data.ping?.error || 'N/A'}
+• 检测耗时: ${response.data.check_duration_ms?.toFixed(1)}ms`
+
+      // 显示端口检测结果（如果有）
+      if (response.data.port_checks) {
+        errorInfo += '\n\n端口检测结果：'
+        Object.entries(response.data.port_checks).forEach(([portName, result]) => {
+          const status = result.success ? '可达' : '不可达'
+          errorInfo += `\n• ${portName}: ${status}`
+        })
+      }
+
+      proxy.$modal.msgWarning(errorInfo)
+    }
+  }).catch(error => {
+    proxy.$modal.closeLoading()
+    proxy.$modal.msgError(`连通性检测失败: ${error.message}`)
+  })
+}
+
+// 批量检测连通性
+function handleBatchCheckConnectivity() {
+  // 修复：使用表格ref获取选中的行
+  const selectedRows = deviceListRef.value ? 
+    deviceListRef.value.getSelectionRows() : 
+    deviceList.value.filter(device => ids.value.includes(device.deviceId))
+  
+  if (selectedRows.length === 0) {
+    proxy.$modal.msgWarning('请先选择要检测的设备')
+    return
+  }
+  
+  const deviceIds = selectedRows.map(row => row.deviceId)
+  const loading = proxy.$modal.loading(`正在批量检测 ${selectedRows.length} 台设备的连通性...`)
+  
+  batchCheckConnectivity({ 
+    deviceIds, 
+    maxConcurrent: 20 
+  }).then(response => {
+    proxy.$modal.closeLoading()
+    
+    const result = response.data
+    const onlineCount = result.online_devices
+    const offlineCount = result.offline_devices
+    const totalTime = result.check_duration_ms?.toFixed(1)
+    
+    // 构建详细结果
+    let detailText = `批量连通性检测完成！
+    
+统计结果：
+• 总设备数: ${result.total_devices}
+• 在线设备: ${onlineCount}
+• 离线设备: ${offlineCount}
+• 检测耗时: ${totalTime}ms
+
+设备详情：`
+
+    result.details?.forEach((detail, index) => {
+      const status = detail.online ? '在线' : '离线'
+      const pingTime = detail.check_details?.ping?.response_time || 'N/A'
+      detailText += `\n${index + 1}. ${detail.hostname}: ${status} (Ping: ${pingTime})`
+    })
+    
+    proxy.$modal.alert(detailText, '批量检测结果')
+    
+    // 检测完成后刷新列表
+    handleQuery()
+  }).catch(error => {
+    proxy.$modal.closeLoading()
+    proxy.$modal.msgError(`批量检测失败: ${error.message}`)
+  })
+}
+
+// 获取连通性统计
+function handleGetConnectivityStats() {
+  const loading = proxy.$modal.loading('正在获取设备连通性统计...')
+  
+  getConnectivityStatistics({ useCache: false }).then(response => {
+    proxy.$modal.closeLoading()
+    
+    const result = response.data
+    const onlineCount = result.online_devices
+    const offlineCount = result.offline_devices
+    const totalTime = result.check_duration_ms?.toFixed(1)
+    
+    proxy.$modal.alert(
+      `设备连通性统计结果：
+      
+• 总设备数: ${result.total_devices}
+• 在线设备: ${onlineCount}
+• 离线设备: ${offlineCount}
+• 检测耗时: ${totalTime}ms
+• 检测时间: ${new Date(result.check_time).toLocaleString()}`,
+      '连通性统计'
+    )
+  }).catch(error => {
+    proxy.$modal.closeLoading()
+    proxy.$modal.msgError(`获取统计失败: ${error.message}`)
+  })
 }
 
 getList();

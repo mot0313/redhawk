@@ -97,7 +97,7 @@ class UrgencyRuleResultModel(BaseModel):
     matched: bool = Field(..., description="是否匹配到规则")
     urgency_level: Optional[str] = Field(default=None, description="紧急程度")
     description: Optional[str] = Field(default=None, description="规则描述")
-    rule_id: Optional[int] = Field(default=None, description="规则ID")
+    rule_id: Optional[int] = Field(default=None, description="规则ID") 
 
 
 class BusinessTypeQueryModel(BaseModel):

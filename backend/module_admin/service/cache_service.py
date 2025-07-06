@@ -1,4 +1,8 @@
+from typing import Any
+import json
+from redis import asyncio as aioredis
 from fastapi import Request
+from config.env import RedisConfig
 from config.enums import RedisInitKeyConfig
 from config.get_redis import RedisUtil
 from module_admin.entity.vo.cache_vo import CacheInfoModel, CacheMonitorModel
@@ -122,3 +126,59 @@ class CacheService:
         await RedisUtil.init_sys_config(request.app.state.redis)
 
         return CrudResponseModel(is_success=True, message='所有缓存清除成功')
+
+    @classmethod
+    async def set_cache(cls, key: str, value: Any, expire: int = -1):
+        """
+        设置缓存（通用方法，不依赖request）
+
+        :param key: 缓存键
+        :param value: 缓存值
+        :param expire: 过期时间（秒），-1表示不过期
+        """
+        redis = None
+        try:
+            redis = await aioredis.from_url(
+                url=f'redis://{RedisConfig.redis_host}',
+                port=RedisConfig.redis_port,
+                username=RedisConfig.redis_username,
+                password=RedisConfig.redis_password,
+                db=RedisConfig.redis_database,
+                encoding='utf-8',
+                decode_responses=True,
+            )
+            serialized_value = json.dumps(value, ensure_ascii=False)
+            if expire > 0:
+                await redis.set(key, serialized_value, ex=expire)
+            else:
+                await redis.set(key, serialized_value)
+        finally:
+            if redis:
+                await redis.close()
+
+    @classmethod
+    async def get_cache(cls, key: str) -> Any:
+        """
+        获取缓存（通用方法，不依赖request）
+
+        :param key: 缓存键
+        :return: 缓存值
+        """
+        redis = None
+        try:
+            redis = await aioredis.from_url(
+                url=f'redis://{RedisConfig.redis_host}',
+                port=RedisConfig.redis_port,
+                username=RedisConfig.redis_username,
+                password=RedisConfig.redis_password,
+                db=RedisConfig.redis_database,
+                encoding='utf-8',
+                decode_responses=True,
+            )
+            cached_value = await redis.get(key)
+            if cached_value:
+                return json.loads(cached_value)
+            return None
+        finally:
+            if redis:
+                await redis.close()

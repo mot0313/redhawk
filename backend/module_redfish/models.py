@@ -1,7 +1,7 @@
 """
 Redfish模块数据库模型
 """
-from sqlalchemy import Column, Integer, BigInteger, String, Text, DateTime, SmallInteger, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, DateTime, SmallInteger, ForeignKey, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -31,7 +31,7 @@ class DeviceInfo(Base):
     redfish_password = Column(String(255), comment='Redfish密码（加密存储）')
     monitor_enabled = Column(SmallInteger, default=1, comment='是否启用监控')
     last_check_time = Column(DateTime, comment='最后检查时间')
-    health_status = Column(String(20), default='unknown', comment='健康状态')
+    health_status = Column(String(20), default='unknown', comment='健康状态（ok正常/warning警告/unknown未知，critical已合并到warning）')
     create_by = Column(String(64), default='', comment='创建者')
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
     update_by = Column(String(64), default='', comment='更新者')
@@ -44,34 +44,49 @@ class DeviceInfo(Base):
 
 
 class AlertInfo(Base):
-    """告警信息表（首页显示用）"""
+    """精简版告警信息表（专注首页展示）"""
     __tablename__ = 'alert_info'
     
-    alert_id = Column(BigInteger, primary_key=True, autoincrement=True, comment='告警ID')
-    device_id = Column(BigInteger, ForeignKey('device_info.device_id'), nullable=False, comment='设备ID')
-    alert_source = Column(String(50), nullable=False, comment='告警来源')
-    component_type = Column(String(50), nullable=False, comment='组件类型')
-    component_name = Column(String(100), comment='组件名称')
-    alert_level = Column(String(20), nullable=False, comment='告警级别')
-    alert_type = Column(String(20), nullable=False, comment='告警类型')
-    alert_type_original = Column(String(20), comment='原始告警类型')
-    alert_message = Column(Text, comment='告警详细信息')
-    alert_status = Column(String(20), default='active', comment='告警状态')
+    alert_id = Column(BigInteger, primary_key=True, autoincrement=True, comment='告警ID（主键）')
+    device_id = Column(BigInteger, ForeignKey('device_info.device_id'), nullable=False, comment='设备ID（外键关联device_info）')
+    component_type = Column(String(50), nullable=False, comment='组件类型（如：CPU/Memory/Storage/Fan/Power/Temperature）')
+    component_name = Column(String(100), comment='组件名称（如：CPU1/Memory_DIMM_A1/Fan1）')
+    health_status = Column(String(20), nullable=False, comment='健康状态（ok正常/warning警告/unknown未知，critical已合并到warning）')
+    urgency_level = Column(String(20), nullable=False, comment='紧急程度（urgent紧急告警/scheduled择期告警）')
+    alert_status = Column(String(20), default='active', comment='告警状态（active活跃告警/resolved已解决告警）')
     first_occurrence = Column(DateTime, nullable=False, comment='首次发生时间')
     last_occurrence = Column(DateTime, comment='最后发生时间')
-    occurrence_count = Column(Integer, default=1, comment='发生次数')
-    acknowledged_time = Column(DateTime, comment='确认时间')
     resolved_time = Column(DateTime, comment='解决时间')
-    resolution_note = Column(Text, comment='解决说明')
-    auto_resolved = Column(SmallInteger, default=0, comment='是否自动解决')
-    notification_sent = Column(SmallInteger, default=0, comment='是否已发送通知')
-    is_manual_override = Column(SmallInteger, default=0, comment='是否手动覆盖')
-    override_reason = Column(String(500), comment='覆盖原因')
-    override_by = Column(String(64), comment='覆盖操作人')
-    override_time = Column(DateTime, comment='覆盖时间')
-    raw_data = Column(Text, comment='原始数据')
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
     update_time = Column(DateTime, default=func.now(), onupdate=func.now(), comment='更新时间')
+
+    # 定义索引
+    __table_args__ = (
+        Index('ix_alert_info_lifecycle', 'device_id', 'component_type', 'component_name', 'alert_status'),
+        Index('ix_alert_info_display', 'alert_status', 'urgency_level', 'last_occurrence'),
+        Index('ix_alert_info_first_occurrence', 'first_occurrence'),
+    )
+    
+    # 向后兼容的字段映射（为了兼容现有代码）
+    @property
+    def alert_level(self):
+        """向后兼容：映射health_status到alert_level"""
+        return self.health_status
+    
+    @alert_level.setter
+    def alert_level(self, value):
+        """向后兼容：设置alert_level时更新health_status"""
+        self.health_status = value
+    
+    @property
+    def alert_type(self):
+        """向后兼容：映射urgency_level到alert_type"""
+        return self.urgency_level
+    
+    @alert_type.setter
+    def alert_type(self, value):
+        """向后兼容：设置alert_type时更新urgency_level"""
+        self.urgency_level = value
     
     # 关联关系
     device = relationship("DeviceInfo", back_populates="alerts")
@@ -91,6 +106,9 @@ class RedfishAlertLog(Base):
     log_level = Column(String(20), comment='日志级别')
     log_message = Column(Text, comment='日志消息')
     raw_data = Column(Text, comment='原始JSON数据')
+    processed_status = Column(String(20), default='unprocessed', comment='处理状态（unprocessed未处理/processed已处理/ignored已忽略）')
+    redfish_log_id = Column(String(100), comment='Redfish原始日志ID')
+    log_hash = Column(String(64), comment='日志内容哈希值（用于去重）')
     occurrence_time = Column(DateTime, nullable=False, comment='发生时间')
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
     
