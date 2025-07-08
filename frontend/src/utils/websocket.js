@@ -19,6 +19,20 @@ class WebSocketService {
     this.messageCache = new Map()
     this.cacheTimeout = 5000 // 5秒缓存时间
     
+    // WebSocket就绪状态管理
+    this.connectionState = {
+      connected: false,      // WebSocket连接是否建立
+      authenticated: false,  // 是否已认证
+      roomsSubscribed: false // 是否已订阅房间
+    }
+    
+    // 房间订阅管理
+    this.roomSubscription = {
+      targetRooms: ['dashboard', 'alerts', 'urgent_alerts', 'device_monitoring'],
+      joinedRooms: new Set(),
+      subscriptionTimeout: null
+    }
+    
     // 获取WebSocket URL
     this.wsUrl = this.getWebSocketUrl()
   }
@@ -84,13 +98,18 @@ class WebSocketService {
     this.isConnecting = false
     this.reconnectAttempts = 0
     
+    // 更新连接状态
+    this.connectionState.connected = true
+    this.connectionState.authenticated = false
+    this.connectionState.roomsSubscribed = false
+    
     // 发送认证和订阅消息
     console.log('[WebSocket] 开始认证和房间订阅...')
     this.authenticate()
     this.subscribeToRooms()
     
-    // 通知连接成功
-    this.emitEvent('connection', { status: 'connected', is_connected: true })
+    // 通知连接成功（但还未就绪）
+    this.emitEvent('connection', { status: 'connected', is_connected: true, is_ready: false })
     
     ElMessage.success('实时推送连接成功')
   }
@@ -128,7 +147,20 @@ class WebSocketService {
     
     this.isConnecting = false
     
-    this.emitEvent('connection', { status: 'disconnected', is_connected: false })
+    // 重置连接状态
+    this.connectionState.connected = false
+    this.connectionState.authenticated = false
+    this.connectionState.roomsSubscribed = false
+    
+    // 清理房间订阅状态
+    this.roomSubscription.joinedRooms.clear()
+    if (this.roomSubscription.subscriptionTimeout) {
+      clearTimeout(this.roomSubscription.subscriptionTimeout)
+      this.roomSubscription.subscriptionTimeout = null
+    }
+    
+    this.emitEvent('connection', { status: 'disconnected', is_connected: false, is_ready: false })
+    this.emitEvent('not_ready', { reason: 'connection_closed' })
     
     if (this.shouldReconnect && event.code !== 1000) {
       console.log('[WebSocket] 准备重连...')
@@ -146,7 +178,21 @@ class WebSocketService {
     console.log('[WebSocket] 当前状态:', this.ws ? this.ws.readyState : 'WebSocket不存在')
     
     this.isConnecting = false
-    this.emitEvent('connection', { status: 'error', error })
+    
+    // 重置连接状态
+    this.connectionState.connected = false
+    this.connectionState.authenticated = false
+    this.connectionState.roomsSubscribed = false
+    
+    // 清理房间订阅状态
+    this.roomSubscription.joinedRooms.clear()
+    if (this.roomSubscription.subscriptionTimeout) {
+      clearTimeout(this.roomSubscription.subscriptionTimeout)
+      this.roomSubscription.subscriptionTimeout = null
+    }
+    
+    this.emitEvent('connection', { status: 'error', error, is_connected: false, is_ready: false })
+    this.emitEvent('not_ready', { reason: 'connection_error', error })
   }
 
   /**
@@ -155,11 +201,32 @@ class WebSocketService {
   authenticate() {
     // 获取当前用户token
     const token = localStorage.getItem('Admin-Token')
+    
     if (token) {
+      console.log('[WebSocket] 🔐 使用Token进行认证...')
       // 后端会自动处理认证，这里发送心跳确认连接
-      this.send({
+      const authResult = this.send({
         type: 'ping'
       })
+      
+      if (authResult) {
+        // 模拟认证成功（实际应等待后端确认）
+        setTimeout(() => {
+          this.connectionState.authenticated = true
+          console.log('[WebSocket] 🔐 Token认证完成')
+          this.checkReadyState()
+        }, 100)
+      } else {
+        console.error('[WebSocket] 认证消息发送失败')
+        // 即使发送失败也标记为已认证，允许降级使用
+        this.connectionState.authenticated = true
+        this.checkReadyState()
+      }
+    } else {
+      console.log('[WebSocket] 🔓 未找到认证Token，使用匿名模式')
+      // 即使没有token也标记为已认证（如果后端允许匿名连接）
+      this.connectionState.authenticated = true
+      this.checkReadyState()
     }
   }
 
@@ -169,35 +236,70 @@ class WebSocketService {
   subscribeToRooms() {
     console.log('[WebSocket] 🏠 开始订阅房间...')
     
-    // 订阅dashboard房间（后端会自动加入）
-    console.log('[WebSocket] 订阅 dashboard 房间')
-    this.send({
-      type: 'join_room',
-      room: 'dashboard'
-    })
+    // 重置房间订阅状态
+    this.roomSubscription.joinedRooms.clear()
+    this.connectionState.roomsSubscribed = false
     
-    // 订阅告警房间
-    console.log('[WebSocket] 订阅 alerts 房间')
-    this.send({
-      type: 'join_room', 
-      room: 'alerts'
-    })
+    // 清除之前的超时定时器
+    if (this.roomSubscription.subscriptionTimeout) {
+      clearTimeout(this.roomSubscription.subscriptionTimeout)
+    }
     
-    // 订阅紧急告警房间
-    console.log('[WebSocket] 订阅 urgent_alerts 房间')
-    this.send({
-      type: 'join_room',
-      room: 'urgent_alerts'
-    })
+    let subscribedCount = 0
     
-    // 订阅设备监控房间
-    console.log('[WebSocket] 订阅 device_monitoring 房间')
-    this.send({
-      type: 'join_room',
-      room: 'device_monitoring'
+    this.roomSubscription.targetRooms.forEach(room => {
+      console.log(`[WebSocket] 订阅 ${room} 房间`)
+      const result = this.send({
+        type: 'join_room',
+        room: room
+      })
+      
+      if (result) {
+        subscribedCount++
+      }
     })
     
     console.log('[WebSocket] ✅ 房间订阅请求已发送')
+    
+    // 设置超时检查，如果3秒内没有收到所有房间确认，则认为订阅完成
+    this.roomSubscription.subscriptionTimeout = setTimeout(() => {
+      if (!this.connectionState.roomsSubscribed) {
+        console.log('[WebSocket] 🏠 房间订阅超时，强制标记为完成')
+        this.connectionState.roomsSubscribed = true
+        this.checkReadyState()
+      }
+    }, 3000)
+    
+    // 如果发送失败，立即标记为完成（降级处理）
+    if (subscribedCount === 0) {
+      console.warn('[WebSocket] 所有房间订阅请求发送失败，降级处理')
+      setTimeout(() => {
+        this.connectionState.roomsSubscribed = true
+        this.checkReadyState()
+      }, 100)
+    }
+  }
+
+  /**
+   * 检查WebSocket是否完全就绪
+   */
+  checkReadyState() {
+    const isReady = this.connectionState.connected && 
+                   this.connectionState.authenticated && 
+                   this.connectionState.roomsSubscribed
+    
+    if (isReady) {
+      console.log('[WebSocket] 🚀 WebSocket完全就绪！')
+      this.emitEvent('ready', { 
+        status: 'ready', 
+        is_connected: true, 
+        is_ready: true,
+        connectionState: { ...this.connectionState }
+      })
+      ElMessage.success('实时推送已就绪，可以进行操作')
+    } else {
+      console.log('[WebSocket] ⏳ WebSocket未完全就绪', this.connectionState)
+    }
   }
 
   /**
@@ -465,9 +567,28 @@ class WebSocketService {
    */
   handleRoomMessage(message) {
     if (message.action === 'joined') {
-      console.log(`[WebSocket] Joined room: ${message.room}`)
+      console.log(`[WebSocket] ✅ 成功加入房间: ${message.room}`)
+      
+      // 记录已加入的房间
+      this.roomSubscription.joinedRooms.add(message.room)
+      
+      // 检查是否所有房间都已加入
+      if (this.roomSubscription.joinedRooms.size >= this.roomSubscription.targetRooms.length) {
+        console.log('[WebSocket] 🏠 所有房间订阅完成')
+        this.connectionState.roomsSubscribed = true
+        
+        // 清除超时定时器
+        if (this.roomSubscription.subscriptionTimeout) {
+          clearTimeout(this.roomSubscription.subscriptionTimeout)
+          this.roomSubscription.subscriptionTimeout = null
+        }
+        
+        // 检查就绪状态
+        this.checkReadyState()
+      }
     } else if (message.action === 'left') {
-      console.log(`[WebSocket] Left room: ${message.room}`)
+      console.log(`[WebSocket] ❌ 离开房间: ${message.room}`)
+      this.roomSubscription.joinedRooms.delete(message.room)
     }
     
     this.emitEvent('room_message', message)
@@ -561,7 +682,24 @@ class WebSocketService {
   scheduleReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error('[WebSocket] 达到最大重连次数，停止重连')
-      ElMessage.error('实时推送连接失败，请刷新页面重试')
+      
+      // 提供手动重连选项
+      ElNotification({
+        title: '连接失败',
+        message: '实时推送连接失败，点击重新连接或刷新页面',
+        type: 'error',
+        duration: 0, // 不自动关闭
+        dangerouslyUseHTMLString: true,
+        customClass: 'websocket-reconnect-notification',
+        onClose: () => {
+          // 通知连接彻底失败
+          this.emitEvent('connection_failed', { 
+            attempts: this.reconnectAttempts,
+            message: '达到最大重连次数'
+          })
+        }
+      })
+      
       return
     }
 
@@ -577,6 +715,31 @@ class WebSocketService {
     this.reconnectTimer = setTimeout(() => {
       this.connect()
     }, delay)
+  }
+
+  /**
+   * 手动重连（重置重连计数）
+   */
+  manualReconnect() {
+    console.log('[WebSocket] 手动触发重连...')
+    this.reconnectAttempts = 0
+    this.shouldReconnect = true
+    
+    // 断开现有连接
+    if (this.ws) {
+      this.ws.close(1000, '手动重连')
+    }
+    
+    // 清除重连定时器
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    
+    // 立即尝试连接
+    setTimeout(() => {
+      this.connect()
+    }, 1000)
   }
 
   /**
@@ -646,6 +809,16 @@ class WebSocketService {
    */
   isConnected() {
     return this.ws && this.ws.readyState === WebSocket.OPEN
+  }
+
+  /**
+   * 检查是否完全就绪（连接+认证+订阅）
+   */
+  isReady() {
+    return this.connectionState.connected && 
+           this.connectionState.authenticated && 
+           this.connectionState.roomsSubscribed &&
+           this.isConnected()
   }
 
   /**

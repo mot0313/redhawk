@@ -60,9 +60,40 @@ def check_batch_completion(batch_id: str, task_success: bool = True):
         
         logger.info(f"Batch {batch_id}: {current_count}/{total_count} tasks completed")
         
+        # 推送监控进度更新（每次任务完成都推送）
+        if current_count < total_count:
+            progress_percentage = round((current_count / total_count) * 100, 2) if total_count > 0 else 0
+            progress_message = {
+                "type": "monitoring_progress",
+                "action": "progress_update",
+                "completed": current_count,
+                "total": total_count,
+                "progress": progress_percentage,
+                "current_device": f"已完成 {current_count} 台设备",
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # 推送进度更新
+            publish_sync_redis_message("websocket:dashboard", progress_message)
+            logger.debug(f"Pushed monitoring progress: {current_count}/{total_count} ({progress_percentage}%)")
+        
         # 如果所有任务都完成了，发送完成通知
         if current_count >= total_count:
             logger.info(f"All monitoring tasks completed for batch {batch_id}")
+            
+            # 先推送100%进度
+            final_progress_message = {
+                "type": "monitoring_progress",
+                "action": "progress_update",
+                "completed": total_count,
+                "total": total_count,
+                "progress": 100.0,
+                "current_device": f"所有 {total_count} 台设备监控完成",
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            publish_sync_redis_message("websocket:dashboard", final_progress_message)
+            logger.debug(f"Pushed final monitoring progress: {total_count}/{total_count} (100%)")
             
             # 获取成功和失败统计
             successful_devices = int(redis_client.get(success_key) or 0)
@@ -273,6 +304,20 @@ def monitor_all_devices() -> Dict[str, Any]:
             publish_sync_redis_message("websocket:dashboard", message)
             
             logger.info(f"Pushed monitoring started notification: {len(devices)} devices")
+            
+            # 推送初始进度状态（0%）
+            initial_progress_message = {
+                "type": "monitoring_progress",
+                "action": "progress_update",
+                "completed": 0,
+                "total": len(devices),
+                "progress": 0.0,
+                "current_device": "开始监控...",
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            publish_sync_redis_message("websocket:dashboard", initial_progress_message)
+            logger.debug(f"Pushed initial monitoring progress: 0/{len(devices)} (0%)")
             
         except Exception as e:
             logger.error(f"Error pushing monitoring started notification: {str(e)}")

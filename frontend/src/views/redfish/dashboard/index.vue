@@ -6,13 +6,24 @@
         <el-card class="status-card">
           <div class="status-content">
             <div class="connection-status">
-              <el-icon :class="wsConnected ? 'connected' : 'disconnected'">
-                <CircleCheck v-if="wsConnected" />
+              <el-icon :class="wsReady ? 'connected' : 'disconnected'">
+                <CircleCheck v-if="wsReady" />
                 <CircleClose v-else />
               </el-icon>
-              <span :class="wsConnected ? 'connected-text' : 'disconnected-text'">
-                {{ wsConnected ? '实时连接已建立' : '实时连接断开' }}
+              <span :class="wsReady ? 'connected-text' : 'disconnected-text'">
+                {{ wsReady ? '实时推送已就绪' : wsConnected ? '连接中...' : '实时连接断开' }}
               </span>
+              
+              <!-- 连接失败时显示重连按钮 -->
+              <el-button 
+                v-if="!wsConnected && !wsConnecting" 
+                link 
+                size="small" 
+                @click="handleManualReconnect"
+                class="reconnect-button"
+              >
+                重新连接
+              </el-button>
             </div>
             
             <!-- 监控进度显示 -->
@@ -32,11 +43,12 @@
             <div class="manual-controls">
               <el-button 
                 type="primary" 
-                :disabled="!wsConnected || monitoringProgress.isMonitoring"
+                :disabled="!wsReady || isButtonLoading || monitoringProgress.isMonitoring"
+                :loading="isButtonLoading"
                 @click="triggerManualMonitoring"
               >
-                <el-icon><Refresh /></el-icon>
-                手动监控
+                <el-icon v-if="!isButtonLoading"><Refresh /></el-icon>
+                {{ isButtonLoading ? '触发中...' : '手动监控' }}
               </el-button>
             </div>
           </div>
@@ -252,7 +264,16 @@ const scheduledAlerts = ref([])
 
 // WebSocket连接状态
 const wsConnected = ref(false)
+const wsReady = ref(false)  // WebSocket完全就绪状态
 const wsConnecting = ref(false)
+
+// 按钮状态管理
+const isButtonLoading = ref(false)
+const buttonTimeout = ref(null)
+
+// 监控超时管理
+const monitoringTimeout = ref(null)
+const MONITORING_TIMEOUT = 5 * 60 * 1000 // 5分钟超时
 
 // 监控进度状态
 const monitoringProgress = ref({
@@ -520,7 +541,74 @@ const initCharts = () => {
 
 // WebSocket事件处理函数
 const handleWebSocketConnection = (data) => {
-  wsConnected.value = data.is_connected;
+  console.log('[Dashboard] WebSocket连接状态更新:', data)
+  wsConnected.value = data.is_connected || false
+  wsReady.value = data.is_ready || false
+  wsConnecting.value = data.status === 'connecting'
+  
+  if (data.status === 'connected') {
+    console.log('[Dashboard] WebSocket已连接，等待就绪...')
+  } else if (data.status === 'disconnected') {
+    console.log('[Dashboard] WebSocket已断开')
+    wsReady.value = false
+  }
+};
+
+// WebSocket就绪状态处理
+const handleWebSocketReady = (data) => {
+  console.log('[Dashboard] WebSocket就绪状态更新:', data)
+  wsReady.value = data.is_ready || false
+  wsConnected.value = data.is_connected || false
+  
+  if (data.is_ready) {
+    console.log('[Dashboard] ✅ WebSocket完全就绪，可以进行操作')
+  }
+}
+
+// WebSocket未就绪状态处理
+const handleWebSocketNotReady = (data) => {
+  console.log('[Dashboard] WebSocket未就绪:', data)
+  wsReady.value = false
+  
+  if (data.reason === 'connection_closed') {
+    console.log('[Dashboard] ❌ 连接关闭，WebSocket不可用')
+  } else if (data.reason === 'connection_error') {
+    console.log('[Dashboard] 🚨 连接错误，WebSocket不可用')
+  }
+};
+
+// WebSocket连接彻底失败处理
+const handleWebSocketConnectionFailed = (data) => {
+  console.error('[Dashboard] WebSocket连接彻底失败:', data)
+  wsConnected.value = false
+  wsReady.value = false
+  
+  // 显示重连按钮
+  ElNotification({
+    title: '连接失败',
+    message: '实时推送连接失败，请点击下方按钮重新连接',
+    type: 'error',
+    duration: 0,
+    customClass: 'dashboard-reconnect-notification',
+    dangerouslyUseHTMLString: true,
+    onClose: () => {
+      // 用户关闭通知时尝试重连
+      handleManualReconnect()
+    }
+  })
+};
+
+// 手动重新连接
+const handleManualReconnect = () => {
+  console.log('[Dashboard] 手动重新连接WebSocket...')
+  ElMessage.info('正在重新连接...')
+  
+  // 重置状态
+  wsConnected.value = false
+  wsReady.value = false
+  
+  // 调用WebSocket手动重连
+  websocketService.manualReconnect()
 };
 
 const handleAlert = (alertData) => {
@@ -583,6 +671,28 @@ const handleMonitoringStarted = (data) => {
   monitoringProgress.value.progress = 0
   monitoringProgress.value.currentDevice = '监控已开始...'
   
+  // 设置监控超时检查
+  if (monitoringTimeout.value) {
+    clearTimeout(monitoringTimeout.value)
+  }
+  
+  monitoringTimeout.value = setTimeout(() => {
+    if (monitoringProgress.value.isMonitoring) {
+      console.warn('[Dashboard] 监控超时，可能存在异常')
+      ElNotification({
+        title: '监控超时',
+        message: '监控任务执行时间过长，可能存在异常。请刷新页面重试或联系管理员。',
+        type: 'warning',
+        duration: 0 // 不自动关闭
+      })
+      
+      // 重置监控状态
+      monitoringProgress.value.isMonitoring = false
+      monitoringProgress.value.progress = 0
+      monitoringProgress.value.currentDevice = ''
+    }
+  }, MONITORING_TIMEOUT)
+  
   // 只在首次开始时显示通知，避免重复
   if (!wasMonitoring) {
     ElMessage.success(`开始监控 ${data.results?.total_devices || 0} 台设备`)
@@ -590,6 +700,12 @@ const handleMonitoringStarted = (data) => {
 }
 
 const handleMonitoringCompleted = (data) => {
+  // 清除监控超时定时器
+  if (monitoringTimeout.value) {
+    clearTimeout(monitoringTimeout.value)
+    monitoringTimeout.value = null
+  }
+  
   // 重置监控进度
   monitoringProgress.value.isMonitoring = false
   monitoringProgress.value.completed = 0
@@ -623,11 +739,15 @@ const handleMonitoringCompleted = (data) => {
 }
 
 const handleMonitoringProgress = (data) => {
+  console.log('[Dashboard] 监控进度更新:', data)
+  
   monitoringProgress.value.isMonitoring = true
   monitoringProgress.value.completed = data.completed || 0
   monitoringProgress.value.total = data.total || 0
   monitoringProgress.value.progress = data.progress || 0
   monitoringProgress.value.currentDevice = data.current_device || ''
+  
+  console.log('[Dashboard] 当前监控状态:', monitoringProgress.value)
 }
 
 const handleDashboardUpdate = (message) => {
@@ -806,6 +926,9 @@ const handleUrgencyRecalculation = async (data) => {
 // 设置WebSocket事件监听器
 const setupWebSocketListeners = () => {
   websocketService.on('connection', handleWebSocketConnection)
+  websocketService.on('ready', handleWebSocketReady)
+  websocketService.on('not_ready', handleWebSocketNotReady)
+  websocketService.on('connection_failed', handleWebSocketConnectionFailed)
   websocketService.on('new_alert', handleAlert)
   websocketService.on('device_status_change', handleDeviceStatusChange)
   websocketService.on('monitoring_started', handleMonitoringStarted)
@@ -823,6 +946,9 @@ const setupWebSocketListeners = () => {
 // 清理WebSocket事件监听器
 const cleanupWebSocketListeners = () => {
   websocketService.off('connection', handleWebSocketConnection)
+  websocketService.off('ready', handleWebSocketReady)
+  websocketService.off('not_ready', handleWebSocketNotReady)
+  websocketService.off('connection_failed', handleWebSocketConnectionFailed)
   websocketService.off('new_alert', handleAlert)
   websocketService.off('device_status_change', handleDeviceStatusChange)
   websocketService.off('monitoring_started', handleMonitoringStarted)
@@ -839,27 +965,69 @@ const cleanupWebSocketListeners = () => {
 
 // 手动触发监控
 const triggerManualMonitoring = async () => {
+  // 检查是否已经在loading状态
+  if (isButtonLoading.value) {
+    console.warn('[Dashboard] 按钮正在处理中，忽略重复点击')
+    return
+  }
+
+  // 检查WebSocket就绪状态
+  if (!wsReady.value) {
+    ElMessage.warning('实时推送未就绪，请稍后再试')
+    return
+  }
+
   try {
+    // 设置loading状态
+    isButtonLoading.value = true
+    
+    // 设置10秒超时
+    buttonTimeout.value = setTimeout(() => {
+      if (isButtonLoading.value) {
+        isButtonLoading.value = false
+        ElMessage.error('触发监控超时，请检查网络连接后重试')
+      }
+    }, 10000)
+    
+    console.log('[Dashboard] 开始触发手动监控...')
+    
     // 优先使用HTTP API方式触发监控
     const response = await triggerMonitor(false)
     
+    // 清除超时定时器
+    if (buttonTimeout.value) {
+      clearTimeout(buttonTimeout.value)
+      buttonTimeout.value = null
+    }
+    
     if (response.success) {
-      // 移除重复通知，监控开始时会有专门的通知
-      // ElMessage.success('监控任务已成功触发')
+      console.log('[Dashboard] 监控任务触发成功')
       
       // 设置监控中状态
       monitoringProgress.value.isMonitoring = true
       monitoringProgress.value.progress = 0
       monitoringProgress.value.currentDevice = '准备开始...'
       
-      // 移除WebSocket触发，避免重复执行
       // WebSocket连接主要用于接收监控状态更新，不用于触发监控
     } else {
+      console.error('[Dashboard] 监控任务触发失败:', response.msg)
       ElMessage.error(response.msg || '触发监控失败')
     }
   } catch (error) {
-    console.error('手动触发监控失败:', error)
+    console.error('[Dashboard] 手动触发监控异常:', error)
+    
+    // 清除超时定时器
+    if (buttonTimeout.value) {
+      clearTimeout(buttonTimeout.value)
+      buttonTimeout.value = null
+    }
+    
     ElMessage.error('触发监控失败，请稍后重试')
+  } finally {
+    // 恢复按钮状态（延迟1秒，避免过快恢复）
+    setTimeout(() => {
+      isButtonLoading.value = false
+    }, 1000)
   }
 }
 
@@ -867,25 +1035,66 @@ const triggerManualMonitoring = async () => {
 // 生命周期钩子
 // ===============================================================
 onMounted(() => {
+  console.log('[Dashboard] 组件开始初始化...')
+  
+  // 初始化图表和基础数据
   initCharts()
   loadDashboardData()
   
   // 设置WebSocket事件监听
   setupWebSocketListeners()
   
-  // 主动检查WebSocket连接状态
-  wsConnected.value = websocketService.isConnected()
-  
-  // 如果未连接，尝试重新连接
-  if (!wsConnected.value) {
-    console.log('[Dashboard] WebSocket未连接，尝试重新连接...')
-    websocketService.connect()
-  } else {
-    console.log('[Dashboard] WebSocket已连接')
-  }
+  // 检查WebSocket状态并初始化连接
+  initializeWebSocketConnection()
 });
 
+// 初始化WebSocket连接
+const initializeWebSocketConnection = () => {
+  console.log('[Dashboard] 初始化WebSocket连接...')
+  
+  // 检查当前连接状态
+  const currentConnected = websocketService.isConnected()
+  const currentReady = websocketService.isReady()
+  
+  console.log('[Dashboard] 当前状态 - 连接:', currentConnected, '就绪:', currentReady)
+  
+  // 更新状态
+  wsConnected.value = currentConnected
+  wsReady.value = currentReady
+  
+  if (currentReady) {
+    console.log('[Dashboard] ✅ WebSocket已就绪，可以进行操作')
+    return
+  }
+  
+  if (currentConnected) {
+    console.log('[Dashboard] WebSocket已连接但未就绪，等待就绪状态...')
+    // 设置超时检查，如果长时间未就绪则重连
+    setTimeout(() => {
+      if (!wsReady.value) {
+        console.warn('[Dashboard] WebSocket长时间未就绪，尝试重新连接...')
+        websocketService.connect()
+      }
+    }, 5000)
+    return
+  }
+  
+  // 如果未连接，尝试重新连接
+  console.log('[Dashboard] WebSocket未连接，尝试重新连接...')
+  websocketService.connect()
+  
+  // 设置连接超时检查
+  setTimeout(() => {
+    if (!wsConnected.value) {
+      console.warn('[Dashboard] WebSocket连接超时，可能需要刷新页面')
+      ElMessage.warning('实时推送连接超时，部分功能可能不可用')
+    }
+  }, 10000)
+}
+
   onUnmounted(() => {
+    console.log('[Dashboard] 组件开始卸载，清理资源...')
+    
     // 清理图表
     if (trendChart) {
       trendChart.dispose()
@@ -894,8 +1103,22 @@ onMounted(() => {
       healthChart.dispose()
     }
     
+    // 清理按钮超时定时器
+    if (buttonTimeout.value) {
+      clearTimeout(buttonTimeout.value)
+      buttonTimeout.value = null
+    }
+    
+    // 清理监控超时定时器
+    if (monitoringTimeout.value) {
+      clearTimeout(monitoringTimeout.value)
+      monitoringTimeout.value = null
+    }
+    
     // 清理WebSocket事件监听器
     cleanupWebSocketListeners()
+    
+    console.log('[Dashboard] 组件卸载完成')
 });
 </script>
 
@@ -927,6 +1150,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.reconnect-button {
+  margin-left: 10px;
+  color: #409eff;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.reconnect-button:hover {
+  color: #66b1ff;
+  background-color: #ecf5ff;
 }
 
 .connection-status .el-icon {
