@@ -3,14 +3,29 @@
 
     <el-row :gutter="10" class="mb20">
       <el-col :span="1.5">
+        <el-button-group>
+          <el-button
+            :type="viewMode === 'list' ? 'primary' : 'default'"
+            icon="List"
+            @click="viewMode = 'list'; handleViewModeChange()"
+          >列表视图</el-button>
+          <el-button
+            :type="viewMode === 'calendar' ? 'primary' : 'default'"
+            icon="Calendar"
+            @click="viewMode = 'calendar'; handleViewModeChange()"
+          >日历视图</el-button>
+        </el-button-group>
+      </el-col>
+      <el-col :span="1.5">
         <el-button
-          type="success"
+          type="warning"
           plain
-          icon="Check"
+          icon="Calendar"
           :disabled="multiple"
-          @click="handleBatchResolve"
-          v-hasPermi="['redfish:alert:resolve']"
-        >批量解决</el-button>
+          @click="handleBatchScheduleMaintenance"
+          v-hasPermi="['redfish:alert:maintenance']"
+          v-show="viewMode === 'list'"
+        >批量计划时间</el-button>
       </el-col>
       <el-col :span="1.5">
         <el-button
@@ -33,6 +48,7 @@
         v-model:showSearch="showSearch"
         @queryTable="getList"
         :columns="columns"
+        v-show="viewMode === 'list'"
       ></right-toolbar>
     </el-row>
 
@@ -40,7 +56,7 @@
       :model="queryParams"
       ref="queryRef"
       :inline="true"
-      v-show="showSearch"
+      v-show="showSearch && viewMode === 'list'"
       label-width="68px"
     >
         <el-form-item label="设备名称" prop="hostname">
@@ -106,6 +122,7 @@
       </el-form>
 
       <el-table
+        v-show="viewMode === 'list'"
         v-loading="loading"
         :data="alertList"
         @selection-change="handleSelectionChange"
@@ -226,11 +243,31 @@
           </template>
         </el-table-column>
       <el-table-column
+        label="维修计划"
+        align="center"
+        key="maintenanceInfo"
+        width="160"
+        v-if="columns[8].visible"
+      >
+          <template #default="scope">
+            <div v-if="scope.row.scheduledMaintenanceTime">
+              <div class="text-sm">{{ parseTime(scope.row.scheduledMaintenanceTime, '{m}-{d} {h}:{i}') }}</div>
+              <el-tag 
+                :type="getMaintenanceStatusType(scope.row.maintenanceStatus)" 
+                size="small"
+              >
+                {{ getMaintenanceStatusText(scope.row.maintenanceStatus) }}
+              </el-tag>
+            </div>
+            <div v-else class="text-gray-400">未安排</div>
+          </template>
+        </el-table-column>
+      <el-table-column
         label="操作"
         align="center"
         width="200"
         fixed="right"
-        v-if="columns[8].visible"
+        v-if="columns[9].visible"
       >
           <template #default="scope">
             <el-button
@@ -238,20 +275,66 @@
               type="primary"
               icon="View"
               @click="handleDetail(scope.row)"
-            >详情</el-button>
+            ></el-button>
             <el-button
               v-if="scope.row.alertStatus === 'active'"
               link
-              type="success"
-              icon="Check"
-              @click="handleResolve(scope.row)"
-            >解决</el-button>
+              type="warning"
+              icon="Calendar"
+              @click="handleScheduleMaintenance(scope.row)"
+              v-hasPermi="['redfish:alert:maintenance']"
+            ></el-button>
           </template>
         </el-table-column>
       </el-table>
 
+      <!-- 日历视图 -->
+      <div v-show="viewMode === 'calendar'" class="calendar-container">
+        <div v-if="loading" class="calendar-loading">
+          <el-skeleton :rows="5" animated />
+        </div>
+        <div v-else>
+          <div class="calendar-header">
+            <el-alert
+              title="日历视图说明"
+              description="此视图显示已安排维修时间的告警。点击维修项目可查看详细信息。红色表示紧急告警，橙色表示择期告警。"
+              type="info"
+              :closable="false"
+              show-icon
+            />
+          </div>
+          <el-calendar v-model="calendarDate" @click="handleCalendarClick" @input="handleCalendarDateChange">
+            <template #date-cell="{ data }">
+              <div class="calendar-cell">
+                <div class="date-text">{{ data.day.split('-')[2] }}</div>
+                <div class="maintenance-items">
+                  <div 
+                    v-for="item in getMaintenanceItemsForDate(data.day)" 
+                    :key="item.alertId"
+                    class="maintenance-item"
+                    :class="getMaintenanceItemClass(item)"
+                    @click.stop="handleCalendarItemClick(item)"
+                  >
+                    <div class="item-info">
+                      <span class="device-name">{{ item.hostname }}</span>
+                      <span class="component-type">{{ item.componentType }}</span>
+                    </div>
+                    <div class="maintenance-time">
+                      {{ formatMaintenanceTime(item.scheduledMaintenanceTime) }}
+                    </div>
+                  </div>
+                  <div v-if="getMaintenanceItemsForDate(data.day).length === 0 && isToday(data.day)" class="no-maintenance">
+                    <span class="today-mark">今日无维修计划</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </el-calendar>
+        </div>
+      </div>
+
       <pagination
-        v-show="total > 0"
+        v-show="total > 0 && viewMode === 'list'"
         :total="total"
         v-model:page="queryParams.pageNum"
         v-model:limit="queryParams.pageSize"
@@ -299,27 +382,97 @@
       </template>
     </el-dialog>
 
-    <!-- 解决告警弹窗 -->
+
+
+
+
+    <!-- 计划维修时间弹窗 -->
     <el-dialog
-      title="解决告警"
-      v-model="resolveVisible"
-      width="500px"
+      title="安排维修时间"
+      v-model="maintenanceVisible"
+      width="600px"
       :close-on-click-modal="false"
     >
-      <el-form ref="resolveRef" :model="resolveForm" :rules="resolveRules" label-width="100px">
-        <el-form-item label="操作人" prop="operator">
-          <el-input v-model="resolveForm.operator" placeholder="请输入操作人" />
+      <el-form ref="maintenanceRef" :model="maintenanceForm" :rules="maintenanceRules" label-width="120px">
+        <el-form-item label="计划维修时间" prop="scheduledMaintenanceTime">
+          <el-date-picker
+            v-model="maintenanceForm.scheduledMaintenanceTime"
+            type="datetime"
+            placeholder="选择计划维修时间"
+            style="width: 100%"
+            format="YYYY-MM-DD HH:mm:ss"
+            value-format="YYYY-MM-DD HH:mm:ss"
+          />
+        </el-form-item>
+
+        <el-form-item label="维修描述">
+          <el-input
+            v-model="maintenanceForm.maintenanceDescription"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入维修描述"
+          />
+        </el-form-item>
+        <el-form-item label="维修备注">
+          <el-input
+            v-model="maintenanceForm.maintenanceNotes"
+            type="textarea"
+            :rows="2"
+            placeholder="请输入维修备注"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
-          <el-button @click="resolveVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitResolve">确定</el-button>
+          <el-button @click="maintenanceVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitMaintenance">确定</el-button>
         </div>
       </template>
     </el-dialog>
 
+    <!-- 批量计划维修时间弹窗 -->
+    <el-dialog
+      title="批量安排维修时间"
+      v-model="batchMaintenanceVisible"
+      width="600px"
+      :close-on-click-modal="false"
+    >
+      <el-form ref="batchMaintenanceRef" :model="batchMaintenanceForm" :rules="batchMaintenanceRules" label-width="120px">
+        <el-form-item label="计划维修时间" prop="scheduledMaintenanceTime">
+          <el-date-picker
+            v-model="batchMaintenanceForm.scheduledMaintenanceTime"
+            type="datetime"
+            placeholder="选择计划维修时间"
+            style="width: 100%"
+            format="YYYY-MM-DD HH:mm:ss"
+            value-format="YYYY-MM-DD HH:mm:ss"
+          />
+        </el-form-item>
 
+        <el-form-item label="维修描述">
+          <el-input
+            v-model="batchMaintenanceForm.maintenanceDescription"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入维修描述"
+          />
+        </el-form-item>
+        <el-form-item label="维修备注">
+          <el-input
+            v-model="batchMaintenanceForm.maintenanceNotes"
+            type="textarea"
+            :rows="2"
+            placeholder="请输入维修备注"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="batchMaintenanceVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitBatchMaintenance">确定</el-button>
+        </div>
+      </template>
+    </el-dialog>
 
     <!-- 精简版移除忽略告警功能 -->
   </div>
@@ -330,8 +483,11 @@ import { ref, onMounted, getCurrentInstance } from 'vue'
 import { 
   getAlertList, 
   getAlertDetail, 
-  resolveAlerts,
-  exportAlerts
+  exportAlerts,
+  scheduleMaintenance,
+  updateMaintenance,
+  batchScheduleMaintenance,
+  getCalendarMaintenance
 } from '@/api/redfish/alert'
 import { parseTime } from '@/utils/ruoyi'
 
@@ -346,6 +502,11 @@ const multiple = ref(true)
 const total = ref(0)
 const showSearch = ref(true)
 
+// 视图相关
+const viewMode = ref('list') // 'list' 或 'calendar'
+const calendarDate = ref(new Date())
+const maintenanceData = ref([])
+
 // 列显示控制
 const columns = ref([
   { key: 0, label: `序号`, visible: true },
@@ -356,7 +517,8 @@ const columns = ref([
   { key: 5, label: `告警消息`, visible: true },
   { key: 6, label: `发生时间`, visible: true },
   { key: 7, label: `状态`, visible: true },
-  { key: 8, label: `操作`, visible: true }
+  { key: 8, label: `维修计划`, visible: true },
+  { key: 9, label: `操作`, visible: true }
 ])
 
 // 查询参数
@@ -372,23 +534,39 @@ const queryParams = ref({
 
 // 弹窗状态
 const detailVisible = ref(false)
-const resolveVisible = ref(false)
+const maintenanceVisible = ref(false)
+const batchMaintenanceVisible = ref(false)
 
 // 详情数据
 const alertDetail = ref(null)
 
 // 表单数据
-const resolveForm = ref({
-  alertIds: '',
-  operator: ''
+const maintenanceForm = ref({
+  alertId: null,
+  scheduledMaintenanceTime: null,
+  maintenanceDescription: '',
+  maintenanceNotes: ''
+})
+
+const batchMaintenanceForm = ref({
+  alertIds: [],
+  scheduledMaintenanceTime: null,
+  maintenanceDescription: '',
+  maintenanceNotes: ''
 })
 
 
 
 // 表单验证规则
-const resolveRules = {
-  operator: [
-    { required: true, message: "操作人不能为空", trigger: "blur" }
+const maintenanceRules = {
+  scheduledMaintenanceTime: [
+    { required: true, message: "计划维修时间不能为空", trigger: "change" }
+  ]
+}
+
+const batchMaintenanceRules = {
+  scheduledMaintenanceTime: [
+    { required: true, message: "计划维修时间不能为空", trigger: "change" }
   ]
 }
 
@@ -457,47 +635,7 @@ function handleDetail(row) {
   })
 }
 
-/** 解决告警 */
-function handleResolve(row) {
-  resolveForm.value = {
-    alertIds: row.alertId.toString(),
-    operator: ''
-  }
-  resolveVisible.value = true
-}
-
-/** 提交解决 */
-function submitResolve() {
-  proxy.$refs["resolveRef"].validate(valid => {
-    if (valid) {
-      resolveAlerts(resolveForm.value).then(() => {
-        proxy.$modal.msgSuccess("解决成功")
-        resolveVisible.value = false
-        getList()
-      }).catch(error => {
-        console.error('解决告警失败:', error)
-        proxy.$modal.msgError("解决告警失败，请检查后端服务是否正常")
-      })
-    }
-  })
-}
-
-
-
-// 精简版移除忽略告警功能
-
-/** 批量解决 */
-function handleBatchResolve() {
-  if (ids.value.length === 0) {
-    proxy.$modal.msgError("请选择要解决的告警")
-    return
-  }
-  resolveForm.value = {
-    alertIds: ids.value.join(','),
-    operator: ''
-  }
-  resolveVisible.value = true
-}
+// 精简版移除解决和忽略告警功能
 
 /** 导出 */
 function handleExport() {
@@ -553,6 +691,212 @@ function getAlertStatusText(status) {
   return statusMap[status] || status
 }
 
+/** 获取维修状态类型 */
+function getMaintenanceStatusType(status) {
+  const statusMap = {
+    'none': 'info',
+    'planned': 'warning',
+    'in_progress': 'primary',
+    'completed': 'success',
+    'cancelled': 'danger'
+  }
+  return statusMap[status] || 'info'
+}
+
+/** 获取维修状态文本 */
+function getMaintenanceStatusText(status) {
+  const statusMap = {
+    'none': '未安排',
+    'planned': '已计划',
+    'in_progress': '进行中',
+    'completed': '已完成',
+    'cancelled': '已取消'
+  }
+  return statusMap[status] || status
+}
+
+/** 安排维修时间 */
+function handleScheduleMaintenance(row) {
+  maintenanceForm.value = {
+    alertId: row.alertId,
+    scheduledMaintenanceTime: row.scheduledMaintenanceTime || null,
+    maintenanceDescription: row.maintenanceDescription || '',
+    maintenanceNotes: row.maintenanceNotes || ''
+  }
+  maintenanceVisible.value = true
+}
+
+/** 提交维修计划 */
+function submitMaintenance() {
+  proxy.$refs["maintenanceRef"].validate(valid => {
+    if (valid) {
+      // 构建API请求数据，使用驼峰命名
+      const requestData = {
+        alertId: maintenanceForm.value.alertId,
+        scheduledMaintenanceTime: maintenanceForm.value.scheduledMaintenanceTime,
+        maintenanceDescription: maintenanceForm.value.maintenanceDescription,
+        maintenanceNotes: maintenanceForm.value.maintenanceNotes
+      }
+      
+      // 总是使用 scheduleMaintenance API，因为它能处理创建和更新
+      scheduleMaintenance(requestData).then(() => {
+        proxy.$modal.msgSuccess("维修计划设置成功")
+        maintenanceVisible.value = false
+        getList()
+      }).catch(error => {
+        console.error('设置维修计划失败:', error)
+        proxy.$modal.msgError("设置维修计划失败，请检查后端服务是否正常")
+      })
+    }
+  })
+}
+
+/** 批量安排维修时间 */
+function handleBatchScheduleMaintenance() {
+  if (ids.value.length === 0) {
+    proxy.$modal.msgError("请选择要安排维修时间的告警")
+    return
+  }
+  batchMaintenanceForm.value = {
+    alertIds: ids.value,
+    scheduledMaintenanceTime: null,
+    maintenanceDescription: '',
+    maintenanceNotes: ''
+  }
+  batchMaintenanceVisible.value = true
+}
+
+/** 提交批量维修计划 */
+function submitBatchMaintenance() {
+  proxy.$refs["batchMaintenanceRef"].validate(valid => {
+    if (valid) {
+      // 构建API请求数据，使用驼峰命名
+      const requestData = {
+        alertIds: batchMaintenanceForm.value.alertIds,
+        scheduledMaintenanceTime: batchMaintenanceForm.value.scheduledMaintenanceTime,
+        maintenanceDescription: batchMaintenanceForm.value.maintenanceDescription,
+        maintenanceNotes: batchMaintenanceForm.value.maintenanceNotes
+      }
+      
+      batchScheduleMaintenance(requestData).then(() => {
+        proxy.$modal.msgSuccess("批量维修计划设置成功")
+        batchMaintenanceVisible.value = false
+        getList()
+      }).catch(error => {
+        console.error('批量设置维修计划失败:', error)
+        proxy.$modal.msgError("批量设置维修计划失败，请检查后端服务是否正常")
+      })
+    }
+  })
+}
+
+/** 日历相关方法 */
+
+/** 获取指定日期的维修项目 */
+function getMaintenanceItemsForDate(dateStr) {
+  return alertList.value.filter(item => {
+    if (!item.scheduledMaintenanceTime) return false
+    const itemDate = new Date(item.scheduledMaintenanceTime).toDateString()
+    const targetDate = new Date(dateStr).toDateString()
+    return itemDate === targetDate
+  })
+}
+
+/** 获取维修项目的样式类 */
+function getMaintenanceItemClass(item) {
+  const classMap = {
+    'urgent': 'maintenance-urgent',
+    'scheduled': 'maintenance-scheduled'
+  }
+  const statusMap = {
+    'planned': 'status-planned',
+    'in_progress': 'status-in-progress',
+    'completed': 'status-completed',
+    'cancelled': 'status-cancelled'
+  }
+  
+  return [
+    classMap[item.urgencyLevel] || 'maintenance-scheduled',
+    statusMap[item.maintenanceStatus] || 'status-planned'
+  ]
+}
+
+/** 格式化维修时间 */
+function formatMaintenanceTime(dateTime) {
+  if (!dateTime) return ''
+  const date = new Date(dateTime)
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+/** 处理日历点击事件 */
+function handleCalendarClick(date) {
+  console.log('Calendar clicked:', date)
+  // 可以在这里添加日期点击的处理逻辑
+}
+
+/** 处理日历日期变化事件 */
+function handleCalendarDateChange(date) {
+  console.log('Calendar date changed:', date)
+  // 当用户切换月份时重新加载维修计划数据
+  if (viewMode.value === 'calendar') {
+    loadMaintenanceData()
+  }
+}
+
+/** 处理日历项目点击事件 */
+function handleCalendarItemClick(item) {
+  handleDetail(item)
+}
+
+/** 判断是否为今天 */
+function isToday(dateStr) {
+  const today = new Date().toISOString().split('T')[0]
+  return dateStr === today
+}
+
+/** 加载维修计划数据 */
+function loadMaintenanceData() {
+  // 在日历视图模式下，加载指定时间范围内的维修计划
+  if (viewMode.value === 'calendar') {
+    // 获取当前月份的开始和结束日期
+    const currentDate = calendarDate.value
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    
+    // 获取当前月份的第一天和最后一天
+    const startDate = new Date(year, month, 1)
+    const endDate = new Date(year, month + 1, 0)
+    
+    // 扩展到前后各一周，以覆盖日历显示的完整范围
+    startDate.setDate(startDate.getDate() - 7)
+    endDate.setDate(endDate.getDate() + 7)
+    
+    const startDateStr = startDate.toISOString().split('T')[0]
+    const endDateStr = endDate.toISOString().split('T')[0]
+    
+    loading.value = true
+    getCalendarMaintenance(startDateStr, endDateStr).then(response => {
+      if (response && response.data) {
+        alertList.value = response.data
+      }
+      loading.value = false
+    }).catch(error => {
+      console.error('获取维修计划数据失败:', error)
+      loading.value = false
+      proxy.$modal.msgError("获取维修计划数据失败")
+    })
+  }
+}
+
+// 监听视图模式变化
+function handleViewModeChange() {
+  if (viewMode.value === 'calendar') {
+    loadMaintenanceData()
+  } else {
+    getList()
+  }
+}
+
 onMounted(() => {
   getList()
 })
@@ -569,5 +913,135 @@ onMounted(() => {
 
 .text-gray-500 {
   color: #6b7280;
+}
+
+/* 日历视图样式 */
+.calendar-container {
+  margin-top: 20px;
+}
+
+.calendar-loading {
+  margin-top: 20px;
+  padding: 20px;
+}
+
+.calendar-header {
+  margin-bottom: 15px;
+}
+
+.calendar-cell {
+  height: 100px;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.date-text {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: #606266;
+}
+
+.maintenance-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 70px;
+  overflow-y: auto;
+}
+
+.maintenance-item {
+  background-color: #f0f9ff;
+  border: 1px solid #e0e7ff;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.maintenance-item:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.maintenance-urgent {
+  background-color: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.maintenance-scheduled {
+  background-color: #fffbeb;
+  border-color: #fed7aa;
+  color: #d97706;
+}
+
+.status-planned {
+  border-left: 3px solid #3b82f6;
+}
+
+.status-in-progress {
+  border-left: 3px solid #10b981;
+}
+
+.status-completed {
+  border-left: 3px solid #6b7280;
+  opacity: 0.7;
+}
+
+.status-cancelled {
+  border-left: 3px solid #ef4444;
+  text-decoration: line-through;
+}
+
+.item-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.device-name {
+  font-weight: bold;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60px;
+}
+
+.component-type {
+  color: #6b7280;
+  font-size: 9px;
+}
+
+.maintenance-time {
+  color: #9ca3af;
+  font-size: 9px;
+  text-align: center;
+}
+
+:deep(.el-calendar-table .el-calendar-day) {
+  padding: 0;
+}
+
+:deep(.el-calendar__body) {
+  padding: 12px;
+}
+
+.no-maintenance {
+  text-align: center;
+  padding: 4px;
+  color: #9ca3af;
+  font-size: 10px;
+}
+
+.today-mark {
+  background-color: #e0f2fe;
+  border: 1px dashed #0284c7;
+  border-radius: 4px;
+  padding: 2px 4px;
+  color: #0284c7;
 }
 </style> 

@@ -45,6 +45,10 @@ class AlertDao:
             AlertInfo.first_occurrence,
             AlertInfo.last_occurrence,
             AlertInfo.resolved_time,
+            AlertInfo.scheduled_maintenance_time,
+            AlertInfo.maintenance_description,
+            AlertInfo.maintenance_status,
+            AlertInfo.maintenance_notes,
             DeviceInfo.hostname,
             DeviceInfo.business_ip,
             DeviceInfo.location
@@ -124,7 +128,11 @@ class AlertDao:
                     'alert_message': alert_message,
                     'first_occurrence': row.first_occurrence,
                     'last_occurrence': row.last_occurrence,
-                    'resolved_time': row.resolved_time
+                    'resolved_time': row.resolved_time,
+                    'scheduled_maintenance_time': row.scheduled_maintenance_time,
+                    'maintenance_description': row.maintenance_description,
+                    'maintenance_status': row.maintenance_status or 'none',
+                    'maintenance_notes': row.maintenance_notes
                 }
                 alert_list.append(alert_dict)
             
@@ -152,7 +160,11 @@ class AlertDao:
                     'alert_message': alert_message,
                     'first_occurrence': row.first_occurrence,
                     'last_occurrence': row.last_occurrence,
-                    'resolved_time': row.resolved_time
+                    'resolved_time': row.resolved_time,
+                    'scheduled_maintenance_time': row.scheduled_maintenance_time,
+                    'maintenance_description': row.maintenance_description,
+                    'maintenance_status': row.maintenance_status or 'none',
+                    'maintenance_notes': row.maintenance_notes
                 }
                 alert_list.append(alert_dict)
             
@@ -299,36 +311,7 @@ class AlertDao:
             logger.error(f"创建或更新告警失败: {str(e)}")
             raise
     
-    @classmethod
-    async def resolve_alerts(cls, db: AsyncSession, alert_ids: List[int], operator: str) -> bool:
-        """
-        解决告警（精简版）
-        
-        Args:
-            db: 数据库会话
-            alert_ids: 告警ID列表
-            operator: 操作人
-            
-        Returns:
-            bool: 是否成功
-        """
-        try:
-            await db.execute(
-                update(AlertInfo)
-                .where(AlertInfo.alert_id.in_(alert_ids))
-                .values(
-                    alert_status='resolved',
-                    resolved_time=datetime.now(),
-                    update_time=datetime.now()
-                )
-            )
-            await db.commit()
-            logger.info(f"解决告警成功: {alert_ids}, 操作人: {operator}")
-            return True
-        except Exception as e:
-            await db.rollback()
-            logger.error(f"解决告警失败: {str(e)}")
-            return False
+    # 精简版移除手动解决告警功能，告警状态由监控系统自动管理
     
     @classmethod
     async def get_alert_statistics(cls, db: AsyncSession, days: int = 7) -> Dict[str, int]:
@@ -400,7 +383,8 @@ class AlertDao:
             'urgent_alerts': urgent_alerts,
             'scheduled_alerts': scheduled_alerts,
             'active_alerts': active_alerts,
-            'resolved_alerts': resolved_alerts
+            'resolved_alerts': resolved_alerts,
+            'ignored_alerts': 0  # 精简版移除忽略功能，设为0
         }
     
     @classmethod
@@ -608,4 +592,284 @@ class AlertDao:
             'by_location': by_location,
             'by_manufacturer': by_manufacturer
         }
+
+    @classmethod
+    async def schedule_maintenance(
+        cls, 
+        db: AsyncSession, 
+        alert_id: int, 
+        maintenance_data: Dict[str, Any]
+    ) -> bool:
+        """
+        为告警安排维修时间
+        
+        Args:
+            db: 数据库会话
+            alert_id: 告警ID
+            maintenance_data: 维修数据
+            
+        Returns:
+            bool: 是否成功
+        """
+        try:
+            # 更新告警的维修信息
+            update_stmt = update(AlertInfo).where(
+                AlertInfo.alert_id == alert_id
+            ).values(
+                scheduled_maintenance_time=maintenance_data.get('scheduled_maintenance_time'),
+                maintenance_description=maintenance_data.get('maintenance_description'),
+                maintenance_status='planned',
+                maintenance_notes=maintenance_data.get('maintenance_notes')
+            )
+            
+            result = await db.execute(update_stmt)
+            if result.rowcount > 0:
+                await db.commit()
+                logger.info(f"为告警 {alert_id} 安排维修时间成功")
+                return True
+            else:
+                logger.warning(f"未找到告警 {alert_id}")
+                return False
+                
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"为告警 {alert_id} 安排维修时间失败: {str(e)}")
+            return False
+
+    @classmethod
+    async def update_maintenance(
+        cls, 
+        db: AsyncSession, 
+        alert_id: int, 
+        maintenance_data: Dict[str, Any],
+        updated_by: str
+    ) -> bool:
+        """
+        更新告警的维修计划
+        
+        Args:
+            db: 数据库会话
+            alert_id: 告警ID
+            maintenance_data: 维修数据
+            updated_by: 更新人
+            
+        Returns:
+            bool: 是否成功
+        """
+        try:
+            # 构建更新字段
+            update_values = {}
+            
+            # 只更新非None的字段
+            for key, value in maintenance_data.items():
+                if value is not None:
+                    update_values[key] = value
+            
+            update_stmt = update(AlertInfo).where(
+                AlertInfo.alert_id == alert_id
+            ).values(**update_values)
+            
+            result = await db.execute(update_stmt)
+            if result.rowcount > 0:
+                await db.commit()
+                logger.info(f"更新告警 {alert_id} 维修计划成功")
+                return True
+            else:
+                logger.warning(f"未找到告警 {alert_id}")
+                return False
+                
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"更新告警 {alert_id} 维修计划失败: {str(e)}")
+            return False
+
+    @classmethod
+    async def batch_schedule_maintenance(
+        cls, 
+        db: AsyncSession, 
+        alert_ids: List[int], 
+        maintenance_data: Dict[str, Any]
+    ) -> int:
+        """
+        批量安排维修时间
+        
+        Args:
+            db: 数据库会话
+            alert_ids: 告警ID列表
+            maintenance_data: 维修数据
+            
+        Returns:
+            int: 成功更新的记录数
+        """
+        try:
+            update_stmt = update(AlertInfo).where(
+                AlertInfo.alert_id.in_(alert_ids)
+            ).values(
+                scheduled_maintenance_time=maintenance_data.get('scheduled_maintenance_time'),
+                maintenance_description=maintenance_data.get('maintenance_description'),
+                maintenance_status=maintenance_data.get('maintenance_status', 'planned'),
+                maintenance_notes=maintenance_data.get('maintenance_notes')
+            )
+            
+            result = await db.execute(update_stmt)
+            updated_count = result.rowcount
+            
+            if updated_count > 0:
+                await db.commit()
+                logger.info(f"批量安排维修时间成功，更新了 {updated_count} 条记录")
+            
+            return updated_count
+                
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"批量安排维修时间失败: {str(e)}")
+            return 0
+
+    @classmethod
+    async def get_maintenance_schedule(
+        cls, 
+        db: AsyncSession, 
+        query_object: Optional[Dict[str, Any]] = None,
+        page_num: int = 1,
+        page_size: int = 10
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """
+        获取维修计划列表
+        
+        Args:
+            db: 数据库会话
+            query_object: 查询条件
+            page_num: 页码
+            page_size: 页大小
+            
+        Returns:
+            Tuple[List[Dict[str, Any]], int]: 维修计划列表和总数
+        """
+        query = select(
+            AlertInfo.alert_id,
+            AlertInfo.device_id,
+            AlertInfo.component_type,
+            AlertInfo.component_name,
+            AlertInfo.health_status,
+            AlertInfo.urgency_level,
+            AlertInfo.scheduled_maintenance_time,
+            AlertInfo.maintenance_description,
+            AlertInfo.maintenance_status,
+            AlertInfo.maintenance_notes,
+            DeviceInfo.hostname,
+            DeviceInfo.business_ip,
+            DeviceInfo.location
+        ).join(DeviceInfo, AlertInfo.device_id == DeviceInfo.device_id
+        ).where(AlertInfo.maintenance_status != 'none')
+        
+        # 构建查询条件
+        conditions = []
+        if query_object:
+            if query_object.get('device_id'):
+                conditions.append(AlertInfo.device_id == query_object['device_id'])
+            if query_object.get('maintenance_status'):
+                conditions.append(AlertInfo.maintenance_status == query_object['maintenance_status'])
+            if query_object.get('scheduled_start_time'):
+                conditions.append(AlertInfo.scheduled_maintenance_time >= query_object['scheduled_start_time'])
+            if query_object.get('scheduled_end_time'):
+                conditions.append(AlertInfo.scheduled_maintenance_time <= query_object['scheduled_end_time'])
+        
+        if conditions:
+            query = query.where(and_(*conditions))
+        
+        # 排序：按计划维修时间排序
+        query = query.order_by(asc(AlertInfo.scheduled_maintenance_time))
+        
+        # 获取总数
+        count_query = select(func.count(AlertInfo.alert_id)).select_from(
+            AlertInfo.__table__.join(DeviceInfo.__table__, AlertInfo.device_id == DeviceInfo.device_id)
+        ).where(AlertInfo.maintenance_status != 'none')
+        if conditions:
+            count_query = count_query.where(and_(*conditions))
+        
+        total_count = await db.scalar(count_query) or 0
+        
+        # 分页
+        offset = (page_num - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+        result = await db.execute(query)
+        
+        # 转换为字典列表
+        maintenance_list = []
+        for row in result.fetchall():
+            maintenance_dict = {
+                'alert_id': row.alert_id,
+                'device_id': row.device_id,
+                'hostname': row.hostname,
+                'business_ip': row.business_ip,
+                'location': row.location,
+                'component_type': row.component_type,
+                'component_name': row.component_name,
+                'health_status': row.health_status,
+                'urgency_level': row.urgency_level,
+                'scheduled_maintenance_time': row.scheduled_maintenance_time,
+                'maintenance_description': row.maintenance_description,
+                'maintenance_status': row.maintenance_status,
+                'maintenance_notes': row.maintenance_notes
+            }
+            maintenance_list.append(maintenance_dict)
+        
+        return maintenance_list, total_count
+
+    @classmethod
+    async def get_calendar_maintenance(
+        cls, 
+        db: AsyncSession, 
+        start_date: str,
+        end_date: str
+    ) -> List:
+        """
+        获取日历视图的维修计划数据
+        
+        Args:
+            db: 数据库会话
+            start_date: 开始日期
+            end_date: 结束日期
+            
+        Returns:
+            List: 维修计划查询结果
+        """
+        try:
+            # 转换日期格式为datetime对象
+            from datetime import datetime
+            start_datetime = datetime.strptime(f"{start_date} 00:00:00", "%Y-%m-%d %H:%M:%S")
+            end_datetime = datetime.strptime(f"{end_date} 23:59:59", "%Y-%m-%d %H:%M:%S")
+            
+            query = select(
+                AlertInfo.alert_id,
+                AlertInfo.device_id,
+                AlertInfo.component_type,
+                AlertInfo.component_name,
+                AlertInfo.health_status,
+                AlertInfo.urgency_level,
+                AlertInfo.alert_status,
+                AlertInfo.scheduled_maintenance_time,
+                AlertInfo.maintenance_description,
+                AlertInfo.maintenance_status,
+                AlertInfo.maintenance_notes,
+                AlertInfo.first_occurrence,
+                AlertInfo.last_occurrence,
+                DeviceInfo.hostname,
+                DeviceInfo.business_ip
+            ).join(
+                DeviceInfo, AlertInfo.device_id == DeviceInfo.device_id
+            ).where(
+                and_(
+                    AlertInfo.scheduled_maintenance_time.isnot(None),
+                    AlertInfo.scheduled_maintenance_time >= start_datetime,
+                    AlertInfo.scheduled_maintenance_time <= end_datetime
+                )
+            ).order_by(asc(AlertInfo.scheduled_maintenance_time))
+            
+            result = await db.execute(query)
+            return result.fetchall()
+            
+        except Exception as e:
+            logger.error(f"获取日历维修计划失败: {str(e)}")
+            raise
  

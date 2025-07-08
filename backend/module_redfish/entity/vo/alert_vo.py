@@ -26,6 +26,12 @@ class AlertInfoModel(BaseModel):
     resolved_note: Optional[str] = Field(default=None, description="解决备注")
     create_time: Optional[datetime] = Field(default=None, description="创建时间")
     update_time: Optional[datetime] = Field(default=None, description="更新时间")
+    
+    # 维修时间相关字段
+    scheduled_maintenance_time: Optional[datetime] = Field(default=None, description="计划维修时间")
+    maintenance_description: Optional[str] = Field(default=None, description="维修描述")
+    maintenance_status: Optional[str] = Field(default="none", description="维修状态（none/planned/in_progress/completed/cancelled）")
+    maintenance_notes: Optional[str] = Field(default=None, description="维修备注")
 
 
 class AlertQueryModel(BaseModel):
@@ -48,13 +54,6 @@ class AlertPageQueryModel(AlertQueryModel):
     """告警分页查询模型"""
     page_num: int = Field(default=1, description="当前页码")
     page_size: int = Field(default=10, description="每页记录数")
-
-
-class AlertResolveModel(BaseModel):
-    """告警解决模型（精简版）"""
-    alert_ids: str = Field(..., description="告警ID列表，逗号分隔")
-    resolved_time: datetime = Field(..., description="解决时间")
-    operator: str = Field(..., description="操作人")
 
 
 class AlertStatisticsModel(BaseModel):
@@ -116,6 +115,55 @@ class AlertDistributionModel(BaseModel):
     byComponent: dict = Field(..., description="按组件类型分布")
     byLocation: dict = Field(..., description="按位置分布")
     byManufacturer: dict = Field(..., description="按制造商分布")
+
+
+class MaintenanceScheduleModel(BaseModel):
+    """维修计划模型"""
+    model_config = ConfigDict(alias_generator=to_camel)
+    
+    alert_id: int = Field(..., description="告警ID")
+    scheduled_maintenance_time: datetime = Field(..., description="计划维修时间")
+    maintenance_description: Optional[str] = Field(default=None, description="维修描述")
+    maintenance_notes: Optional[str] = Field(default=None, description="维修备注")
+
+
+class MaintenanceUpdateModel(BaseModel):
+    """维修计划更新模型"""
+    model_config = ConfigDict(alias_generator=to_camel)
+    
+    alert_id: int = Field(..., description="告警ID")
+    scheduled_maintenance_time: Optional[datetime] = Field(default=None, description="计划维修时间")
+    maintenance_description: Optional[str] = Field(default=None, description="维修描述")
+    maintenance_status: Optional[str] = Field(default=None, description="维修状态（none/planned/in_progress/completed/cancelled）")
+    maintenance_notes: Optional[str] = Field(default=None, description="维修备注")
+
+
+class BatchMaintenanceUpdateModel(BaseModel):
+    """批量维修计划更新模型"""
+    model_config = ConfigDict(alias_generator=to_camel)
+    
+    alert_ids: List[int] = Field(..., description="告警ID列表")
+    scheduled_maintenance_time: Optional[datetime] = Field(default=None, description="计划维修时间")
+    maintenance_description: Optional[str] = Field(default=None, description="维修描述")
+    maintenance_status: Optional[str] = Field(default=None, description="维修状态（none/planned/in_progress/completed/cancelled）")
+    maintenance_notes: Optional[str] = Field(default=None, description="维修备注")
+
+
+class MaintenanceQueryModel(BaseModel):
+    """维修计划查询模型"""
+    model_config = ConfigDict(alias_generator=to_camel)
+    
+    device_id: Optional[int] = Field(default=None, description="设备ID")
+    maintenance_status: Optional[str] = Field(default=None, description="维修状态")
+    scheduled_start_time: Optional[datetime] = Field(default=None, description="计划开始时间范围")
+    scheduled_end_time: Optional[datetime] = Field(default=None, description="计划结束时间范围")
+
+
+@as_query
+class MaintenancePageQueryModel(MaintenanceQueryModel):
+    """维修计划分页查询模型"""
+    page_num: int = Field(default=1, description="当前页码")
+    page_size: int = Field(default=10, description="每页记录数")
 
 
  

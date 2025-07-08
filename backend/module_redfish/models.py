@@ -59,6 +59,12 @@ class AlertInfo(Base):
     resolved_time = Column(DateTime, comment='解决时间')
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
     update_time = Column(DateTime, default=func.now(), onupdate=func.now(), comment='更新时间')
+    
+    # 维修时间相关字段
+    scheduled_maintenance_time = Column(DateTime, comment='计划维修时间')
+    maintenance_description = Column(Text, comment='维修描述')
+    maintenance_status = Column(String(20), default='none', comment='维修状态（none/planned/in_progress/completed/cancelled）')
+    maintenance_notes = Column(Text, comment='维修备注')
 
     # 定义索引
     __table_args__ = (

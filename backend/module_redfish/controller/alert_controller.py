@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Union, Optional, Literal
-from pydantic_validation_decorator import ValidateFields
+# 删除validation decorator，使用Pydantic自动验证
 from config.get_db import get_db
 from config.enums import BusinessType
 from module_admin.annotation.log_annotation import Log
@@ -13,7 +13,8 @@ from module_admin.aspect.interface_auth import CheckUserInterfaceAuth
 from module_admin.entity.vo.user_vo import CurrentUserModel
 from module_admin.service.login_service import LoginService
 from module_redfish.entity.vo.alert_vo import (
-    AlertPageQueryModel, AlertResolveModel
+    AlertPageQueryModel, MaintenanceScheduleModel, 
+    MaintenanceUpdateModel, BatchMaintenanceUpdateModel, MaintenancePageQueryModel
 )
 from module_redfish.service.alert_service import AlertService
 from utils.response_util import ResponseUtil
@@ -46,6 +47,23 @@ async def get_alert_list(
         return ResponseUtil.failure(msg='获取告警列表失败')
 
 
+@alertController.get('/calendar-maintenance', dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:maintenance'))])
+async def get_calendar_maintenance(
+    request: Request,
+    start_date: str = Query(description="开始日期 YYYY-MM-DD"),
+    end_date: str = Query(description="结束日期 YYYY-MM-DD"),
+    query_db: AsyncSession = Depends(get_db)
+):
+    """获取日历视图的维修计划数据"""
+    try:
+        calendar_data = await AlertService.get_calendar_maintenance_services(query_db, start_date, end_date)
+        logger.info(f'获取日历维修计划成功: {start_date} 到 {end_date}')
+        return ResponseUtil.success(data=calendar_data)
+    except Exception as e:
+        logger.error(f'获取日历维修计划失败: {str(e)}')
+        return ResponseUtil.failure(msg='获取日历维修计划失败')
+
+
 @alertController.get(
     '/{alert_id}',
     dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:list'))]
@@ -68,29 +86,7 @@ async def get_alert_detail(
 # 精简版移除手动覆盖功能
 
 
-@alertController.put('/resolve', dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:resolve'))])
-@ValidateFields(validate_model='resolve_alert')
-@Log(title='告警管理', business_type=BusinessType.UPDATE)
-async def resolve_alerts(
-    request: Request,
-    resolve_alert: AlertResolveModel,
-    query_db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserModel = Depends(LoginService.get_current_user)
-):
-    """解决告警（精简版）"""
-    try:
-        resolve_alert.operator = current_user.user.user_name
-        resolve_alert.resolved_time = datetime.now()
-        
-        resolve_result = await AlertService.resolve_alerts_services(query_db, resolve_alert)
-        logger.info(f'解决告警: {resolve_alert.alert_ids}')
-        return resolve_result
-    except Exception as e:
-        logger.error(f'解决告警失败: {str(e)}')
-        return ResponseUtil.failure(msg='解决告警失败')
-
-
-# 精简版移除忽略告警功能
+# 精简版移除手动解决和忽略告警功能，告警状态由监控系统自动管理
 
 
 @alertController.get('/statistics', dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:list'))])
@@ -185,4 +181,92 @@ async def get_device_alerts(
         return ResponseUtil.success(data=device_alerts)
     except Exception as e:
         logger.error(f'获取设备告警列表失败: {str(e)}')
-        return ResponseUtil.failure(msg='获取设备告警列表失败') 
+        return ResponseUtil.failure(msg='获取设备告警列表失败')
+
+
+@alertController.post('/schedule-maintenance', dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:maintenance'))])
+@Log(title='告警维修计划', business_type=BusinessType.INSERT)
+async def schedule_maintenance(
+    request: Request,
+    maintenance_schedule: MaintenanceScheduleModel,
+    query_db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserModel = Depends(LoginService.get_current_user)
+):
+    """为告警安排维修时间"""
+    try:
+        result = await AlertService.schedule_maintenance_services(query_db, maintenance_schedule)
+        logger.info(f'安排维修时间成功: alert_id={maintenance_schedule.alert_id}')
+        return result
+    except Exception as e:
+        logger.error(f'安排维修时间失败: {str(e)}')
+        return ResponseUtil.failure(msg='安排维修时间失败')
+
+
+@alertController.put('/update-maintenance', dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:maintenance'))])
+@Log(title='告警维修计划', business_type=BusinessType.UPDATE)
+async def update_maintenance(
+    request: Request,
+    maintenance_update: MaintenanceUpdateModel,
+    query_db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserModel = Depends(LoginService.get_current_user)
+):
+    """更新告警维修计划"""
+    try:
+        result = await AlertService.update_maintenance_services(query_db, maintenance_update)
+        logger.info(f'更新维修计划成功: alert_id={maintenance_update.alert_id}')
+        return result
+    except Exception as e:
+        logger.error(f'更新维修计划失败: {str(e)}')
+        return ResponseUtil.failure(msg='更新维修计划失败')
+
+
+@alertController.put('/batch-schedule-maintenance', dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:maintenance'))])
+@Log(title='告警维修计划', business_type=BusinessType.UPDATE)
+async def batch_schedule_maintenance(
+    request: Request,
+    batch_maintenance: BatchMaintenanceUpdateModel,
+    query_db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserModel = Depends(LoginService.get_current_user)
+):
+    """批量安排维修时间"""
+    try:
+        result = await AlertService.batch_schedule_maintenance_services(query_db, batch_maintenance)
+        logger.info(f'批量安排维修时间成功: alert_ids={batch_maintenance.alert_ids}')
+        return result
+    except Exception as e:
+        logger.error(f'批量安排维修时间失败: {str(e)}')
+        return ResponseUtil.failure(msg='批量安排维修时间失败')
+
+
+@alertController.get('/maintenance-schedule', response_model=PageResponseModel, dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:maintenance'))])
+async def get_maintenance_schedule(
+    request: Request,
+    maintenance_query: MaintenancePageQueryModel = Depends(MaintenancePageQueryModel.as_query),
+    query_db: AsyncSession = Depends(get_db)
+):
+    """获取维修计划列表"""
+    try:
+        maintenance_list = await AlertService.get_maintenance_schedule_services(query_db, maintenance_query)
+        logger.info('获取维修计划列表成功')
+        return ResponseUtil.success(model_content=maintenance_list)
+    except Exception as e:
+        logger.error(f'获取维修计划列表失败: {str(e)}')
+        return ResponseUtil.failure(msg='获取维修计划列表失败')
+
+
+@alertController.delete('/cancel-maintenance/{alert_id}', dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:maintenance'))])
+@Log(title='告警维修计划', business_type=BusinessType.DELETE)
+async def cancel_maintenance(
+    request: Request,
+    alert_id: int,
+    query_db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserModel = Depends(LoginService.get_current_user)
+):
+    """取消告警维修计划"""
+    try:
+        result = await AlertService.cancel_maintenance_services(query_db, alert_id, current_user.user.user_name)
+        logger.info(f'取消维修计划成功: alert_id={alert_id}')
+        return result
+    except Exception as e:
+        logger.error(f'取消维修计划失败: {str(e)}')
+        return ResponseUtil.failure(msg='取消维修计划失败') 

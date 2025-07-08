@@ -17,34 +17,7 @@ export function getAlertDetail(alertId) {
   })
 }
 
-// 解决告警
-export function resolveAlerts(data) {
-  return request({
-    url: '/redfish/alert/resolve',
-    method: 'put',
-    data: data
-  })
-}
-
-
-
-// 忽略告警
-export function ignoreAlerts(data) {
-  return request({
-    url: '/redfish/alert/ignore',
-    method: 'put',
-    data: data
-  })
-}
-
-// 手动覆盖告警级别
-export function overrideAlertLevel(data) {
-  return request({
-    url: '/redfish/alert/manualOverride',
-    method: 'put',
-    data: data
-  })
-}
+// 移除手动解决、忽略和覆盖告警功能，告警状态由监控系统自动管理
 
 // 获取告警统计信息
 export function getAlertStatistics(days = 7) {
@@ -105,5 +78,61 @@ export function exportAlerts(params) {
     method: 'get',
     params: params,
     responseType: 'blob'
+  })
+}
+
+// 安排维修时间
+export function scheduleMaintenance(data) {
+  return request({
+    url: '/redfish/alert/schedule-maintenance',
+    method: 'post',
+    data: data
+  })
+}
+
+// 更新维修计划
+export function updateMaintenance(data) {
+  return request({
+    url: '/redfish/alert/update-maintenance',
+    method: 'put',
+    data: data
+  })
+}
+
+// 批量安排维修时间
+export function batchScheduleMaintenance(data) {
+  return request({
+    url: '/redfish/alert/batch-schedule-maintenance',
+    method: 'put',
+    data: data
+  })
+}
+
+// 获取维修计划列表
+export function getMaintenanceSchedule(params) {
+  return request({
+    url: '/redfish/alert/maintenance-schedule',
+    method: 'get',
+    params: params
+  })
+}
+
+// 取消维修计划
+export function cancelMaintenance(alertId) {
+  return request({
+    url: `/redfish/alert/cancel-maintenance/${alertId}`,
+    method: 'delete'
+  })
+}
+
+// 获取日历视图的维修计划数据
+export function getCalendarMaintenance(startDate, endDate) {
+  return request({
+    url: '/redfish/alert/calendar-maintenance',
+    method: 'get',
+    params: {
+      start_date: startDate,
+      end_date: endDate
+    }
   })
 } 
