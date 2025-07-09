@@ -36,14 +36,6 @@
           v-hasPermi="['redfish:alert:export']"
         >导出</el-button>
       </el-col>
-      <el-col :span="1.5">
-        <el-button
-          type="primary"
-          plain
-          icon="Refresh"
-          @click="handleRefresh"
-        >刷新</el-button>
-      </el-col>
       <right-toolbar
         v-model:showSearch="showSearch"
         @queryTable="getList"
@@ -297,7 +289,7 @@
           <div class="calendar-header">
             <el-alert
               title="日历视图说明"
-              description="此视图显示已安排维修时间的告警。点击维修项目可查看详细信息。红色表示紧急告警，橙色表示择期告警。"
+              description="此视图显示已安排维修时间的告警。蓝色左边框表示计划中，绿色左边框表示已完成。红色表示紧急告警，橙色表示择期告警。点击维修项目可查看详细信息。"
               type="info"
               :closable="false"
               show-icon
@@ -644,11 +636,6 @@ function handleExport() {
   }, `alert_${new Date().getTime()}.xlsx`)
 }
 
-/** 刷新 */
-function handleRefresh() {
-  getList()
-}
-
 /** 获取健康状态类型 */
 function getHealthStatusType(status) {
   const statusMap = {
@@ -808,17 +795,21 @@ function getMaintenanceItemClass(item) {
     'urgent': 'maintenance-urgent',
     'scheduled': 'maintenance-scheduled'
   }
-  const statusMap = {
-    'planned': 'status-planned',
-    'in_progress': 'status-in-progress',
-    'completed': 'status-completed',
-    'cancelled': 'status-cancelled'
+  
+  // 根据告警状态和维修计划安排情况设置边框
+  let statusClass = ''
+  if (item.scheduledMaintenanceTime) {
+    if (item.alertStatus === 'active') {
+      statusClass = 'status-planned' // 蓝色边框 - 计划中
+    } else if (item.alertStatus === 'resolved') {
+      statusClass = 'status-in-progress' // 绿色边框 - 已完成
+    }
   }
   
   return [
     classMap[item.urgencyLevel] || 'maintenance-scheduled',
-    statusMap[item.maintenanceStatus] || 'status-planned'
-  ]
+    statusClass
+  ].filter(Boolean) // 过滤掉空字符串
 }
 
 /** 格式化维修时间 */
