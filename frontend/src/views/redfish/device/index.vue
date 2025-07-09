@@ -3,12 +3,27 @@
 
     <el-row :gutter="10" class="mb20">
       <el-col :span="1.5">
+        <el-button-group>
+          <el-button
+            :type="viewMode === 'list' ? 'primary' : 'default'"
+            icon="List"
+            @click="viewMode = 'list'; handleViewModeChange()"
+          >列表视图</el-button>
+          <el-button
+            :type="viewMode === 'datacenter' ? 'primary' : 'default'"
+            icon="OfficeBuilding"
+            @click="viewMode = 'datacenter'; handleViewModeChange()"
+          >机房视图</el-button>
+        </el-button-group>
+      </el-col>
+      <el-col :span="1.5">
         <el-button
           type="primary"
           plain
           icon="Plus"
           @click="handleAdd"
           v-hasPermi="['redfish:device:add']"
+          v-show="viewMode === 'list'"
         >新增</el-button>
       </el-col>
       <el-col :span="1.5">
@@ -19,6 +34,7 @@
           :disabled="single"
           @click="handleUpdate"
           v-hasPermi="['redfish:device:edit']"
+          v-show="viewMode === 'list'"
         >修改</el-button>
       </el-col>
       <el-col :span="1.5">
@@ -29,6 +45,7 @@
           :disabled="multiple"
           @click="handleDelete"
           v-hasPermi="['redfish:device:remove']"
+          v-show="viewMode === 'list'"
         >删除</el-button>
       </el-col>
       <el-col :span="1.5">
@@ -39,6 +56,7 @@
           :disabled="single"
           @click="handleTestConnection"
           v-hasPermi="['redfish:device:test']"
+          v-show="viewMode === 'list'"
         >测试连接</el-button>
       </el-col>
       <el-col :span="1.5">
@@ -48,6 +66,7 @@
           icon="Upload"
           @click="handleImport"
           v-hasPermi="['redfish:device:import']"
+          v-show="viewMode === 'list'"
         >导入</el-button>
       </el-col>
       <el-col :span="1.5">
@@ -57,6 +76,7 @@
           icon="Download"
           @click="handleExport"
           v-hasPermi="['redfish:device:export']"
+          v-show="viewMode === 'list'"
         >导出</el-button>
       </el-col>
       <el-col :span="1.5">
@@ -66,6 +86,7 @@
           icon="Connection"
           @click="handleBatchCheckConnectivity"
           :disabled="multiple"
+          v-show="viewMode === 'list'"
         >批量检测连通性</el-button>
       </el-col>
       <el-col :span="1.5">
@@ -74,12 +95,14 @@
           plain
           icon="DataAnalysis"
           @click="handleGetConnectivityStats"
+          v-show="viewMode === 'list'"
         >连通性统计</el-button>
       </el-col>
       <right-toolbar
         v-model:showSearch="showSearch"
         @queryTable="getList"
         :columns="columns"
+        v-show="viewMode === 'list'"
       ></right-toolbar>
     </el-row>
 
@@ -87,7 +110,7 @@
       :model="queryParams"
       ref="queryRef"
       :inline="true"
-      v-show="showSearch"
+      v-show="showSearch && viewMode === 'list'"
       label-width="68px"
     >
       <el-form-item label="主机名" prop="hostname">
@@ -152,6 +175,7 @@
       v-loading="loading"
       :data="deviceList"
       @selection-change="handleSelectionChange"
+      v-show="viewMode === 'list'"
     >
       <el-table-column type="selection" width="50" align="center" />
       <el-table-column
@@ -319,12 +343,286 @@
     </el-table>
 
     <pagination
-      v-show="total > 0"
+      v-show="total > 0 && viewMode === 'list'"
       :total="total"
       v-model:page="queryParams.pageNum"
       v-model:limit="queryParams.pageSize"
       @pagination="getList"
     />
+
+    <!-- 机房可视化视图 -->
+    <div v-show="viewMode === 'datacenter'" class="datacenter-container">
+      <div v-if="loading" class="datacenter-loading">
+        <el-skeleton :rows="3" animated />
+      </div>
+      <div v-else>
+        <!-- 面包屑导航 -->
+        <el-breadcrumb separator=">" class="mb-4" v-if="currentView !== 'dataCenter'">
+          <el-breadcrumb-item @click="backToDataCenter" class="breadcrumb-link">数据中心</el-breadcrumb-item>
+          <el-breadcrumb-item v-if="selectedDataCenter" @click="backToRoom" class="breadcrumb-link">
+            {{ getDataCenterName(selectedDataCenter) }}
+          </el-breadcrumb-item>
+          <el-breadcrumb-item v-if="selectedRoom" class="breadcrumb-current">
+            {{ selectedRoom }}
+          </el-breadcrumb-item>
+        </el-breadcrumb>
+
+        <!-- 数据中心总览 -->
+        <div v-if="currentView === 'dataCenter'" class="datacenter-overview">
+          <div class="overview-header">
+            <el-alert
+              title="机房可视化说明"
+              description="此视图显示设备在数据中心的分布情况。绿色表示设备正常，黄色表示有警告，红色表示有严重问题。点击数据中心可查看详细机房分布。"
+              type="info"
+              :closable="false"
+              show-icon
+              class="mb-4"
+            />
+          </div>
+          
+          <el-row :gutter="20" class="datacenter-cards">
+            <el-col 
+              :xl="6" :lg="8" :md="12" :sm="24" 
+              v-for="(dc, code) in dataCenterData" 
+              :key="code"
+              class="mb-4"
+            >
+              <el-card 
+                :body-style="{ padding: '24px' }"
+                shadow="hover"
+                class="datacenter-card-simple"
+                :class="`datacenter-${code.toLowerCase()}`"
+                @click="selectDataCenter(code)"
+              >
+                <div class="card-header-simple">
+                  <div class="title-section">
+                    <el-icon size="28" class="datacenter-icon-simple">
+                      <OfficeBuilding />
+                    </el-icon>
+                    <h3 class="datacenter-title-simple">{{ dc.name }}</h3>
+                  </div>
+                  <div class="health-indicator" :class="getDataCenterHealthClass(dc.healthStats)">
+                    {{ getDataCenterHealthText(dc.healthStats) }}
+                  </div>
+                </div>
+                
+                <div class="stats-section">
+                  <div class="stat-item-simple">
+                    <div class="stat-value-simple">{{ dc.totalDevices }}</div>
+                    <div class="stat-label-simple">设备总数</div>
+                  </div>
+                  <div class="stat-divider"></div>
+                  <div class="stat-item-simple">
+                    <div class="stat-value-simple">{{ dc.roomCount }}</div>
+                    <div class="stat-label-simple">机房数量</div>
+                  </div>
+                </div>
+
+                <div class="health-detail">
+                  <div class="health-item-simple">
+                    <span class="health-dot health-ok"></span>
+                    <span class="health-text">正常 {{ dc.healthStats.ok || 0 }}</span>
+                  </div>
+                  <div class="health-item-simple">
+                    <span class="health-dot health-warning"></span>
+                    <span class="health-text">警告 {{ dc.healthStats.warning || 0 }}</span>
+                  </div>
+                  <div class="health-item-simple">
+                    <span class="health-dot health-unknown"></span>
+                    <span class="health-text">未知 {{ dc.healthStats.unknown || 0 }}</span>
+                  </div>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 机房视图 -->
+        <div v-if="currentView === 'room'" class="room-view">
+          <div class="room-header">
+            <h2>{{ getDataCenterName(selectedDataCenter) }} - 机房分布</h2>
+          </div>
+          
+          <el-row :gutter="16" class="room-grid">
+            <el-col 
+              :xl="6" :lg="8" :md="12" :sm="24"
+              v-for="room in roomData"
+              :key="room.code"
+              class="mb-3"
+            >
+              <el-card 
+                :body-style="{ padding: '16px' }"
+                shadow="hover"
+                class="room-card"
+                :class="getRoomStatusClass(room)"
+                @click="selectRoom(room.code)"
+              >
+                <div class="room-info">
+                  <h4 class="room-title">{{ room.code }}</h4>
+                  <div class="room-stats">
+                    <span class="device-count">{{ room.deviceCount }}台设备</span>
+                    <span class="rack-count">{{ room.rackCount }}个机柜</span>
+                  </div>
+                </div>
+                <div class="room-status" :class="getRoomHealthClass(room)">
+                  {{ getRoomHealthText(room) }}
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 机柜视图 -->
+        <div v-if="currentView === 'rack'" class="rack-view">
+          <div class="rack-header">
+            <h2>{{ selectedRoom }} - 机柜分布</h2>
+          </div>
+          
+          <el-row :gutter="12" class="rack-grid">
+            <el-col 
+              :xl="4" :lg="6" :md="8" :sm="12"
+              v-for="rack in rackData"
+              :key="rack.code"
+              class="mb-3"
+            >
+              <el-card 
+                :body-style="{ padding: '12px' }"
+                shadow="hover"
+                class="rack-card"
+                :class="getRackStatusClass(rack)"
+              >
+                <div class="rack-header-info">
+                  <h5 class="rack-title">{{ rack.code }}</h5>
+                  <el-tag 
+                    size="small" 
+                    :type="getRackOccupancyType(rack.occupancyRate)"
+                  >
+                    {{ rack.occupancyRate }}%
+                  </el-tag>
+                </div>
+                
+                <div class="rack-units">
+                  <div class="rack-scale">
+                                          <div 
+                        v-for="unit in getRackUnits(rack)" 
+                        :key="unit.unitNumber"
+                        class="unit-slot"
+                        :class="[
+                          unit.device ? `unit-occupied ${getDeviceHealthClass(unit.device)}` : 'unit-empty',
+                          unit.isDeviceStart ? 'device-start' : '',
+                          unit.isDeviceMiddle ? 'device-middle' : '',
+                          'unit-clickable'
+                        ]"
+                        :title="unit.device ? `${unit.device.hostname} (${unit.device.uRange}) - 点击查看设备详情` : `${unit.unitNumber}U - 空闲，点击查看机柜详情`"
+                        @click="handleUnitClick(unit, rack, $event)"
+                      >
+                        <div class="unit-number">{{ unit.unitNumber }}</div>
+                                                 <div v-if="unit.isDeviceStart" class="unit-device-merged" :style="{ height: (unit.deviceHeight * 13) + 'px' }">
+                          <div class="device-name-merged">{{ unit.device.hostname }}</div>
+                          <div class="device-range">{{ unit.device.uRange }}</div>
+                        </div>
+                        <div v-else-if="unit.isDeviceMiddle" class="unit-device-middle">
+                          <!-- 设备占用的中间部分 -->
+                        </div>
+                        <div v-else class="unit-empty-space"></div>
+                      </div>
+                  </div>
+                  <div v-if="rack.devices.length === 0" class="no-devices">
+                    无设备
+                  </div>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 设备详情抽屉 -->
+        <el-drawer
+          v-model="deviceDrawerVisible"
+          :title="`机柜 ${selectedRack?.code} - 设备详情`"
+          direction="rtl"
+          size="600px"
+        >
+          <div v-if="selectedRack" class="device-details">
+            <el-table :data="selectedRack.devices" style="width: 100%">
+              <el-table-column prop="hostname" label="设备名称" />
+              <el-table-column prop="businessIp" label="业务IP" />
+              <el-table-column prop="uRange" label="U位" width="80" />
+              <el-table-column prop="healthStatus" label="状态" width="100">
+                <template #default="scope">
+                  <el-tag :type="getHealthStatusType(scope.row.healthStatus)">
+                    {{ getHealthStatusText(scope.row.healthStatus) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="100">
+                <template #default="scope">
+                  <el-button 
+                    link 
+                    type="primary" 
+                    @click="handleDetail(scope.row)"
+                    size="small"
+                  >
+                    详情
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-drawer>
+
+        <!-- 设备信息弹窗 -->
+        <el-dialog
+          v-model="deviceInfoVisible"
+          :title="`设备信息 - ${selectedDevice?.hostname || ''}`"
+          width="500px"
+          @close="selectedDevice = null"
+        >
+          <div v-if="selectedDevice" class="device-info-content">
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="主机名">
+                {{ selectedDevice.hostname }}
+              </el-descriptions-item>
+              <el-descriptions-item label="业务IP">
+                {{ selectedDevice.businessIp }}
+              </el-descriptions-item>
+              <el-descriptions-item label="带外IP">
+                {{ selectedDevice.oobIp }}
+              </el-descriptions-item>
+              <el-descriptions-item label="U位范围">
+                {{ selectedDevice.uRange }}
+              </el-descriptions-item>
+              <el-descriptions-item label="机房位置">
+                {{ selectedDevice.location }}
+              </el-descriptions-item>
+              <el-descriptions-item label="健康状态">
+                <el-tag :type="getHealthStatusType(selectedDevice.healthStatus)">
+                  {{ getHealthStatusText(selectedDevice.healthStatus) }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="系统负责人">
+                {{ selectedDevice.systemOwner || '-' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="操作系统">
+                {{ selectedDevice.operatingSystem || '-' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="设备型号">
+                {{ selectedDevice.model || '-' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="厂商">
+                {{ selectedDevice.manufacturer || '-' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="序列号">
+                {{ selectedDevice.serialNumber || '-' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="技术系统">
+                {{ selectedDevice.technicalSystem || '-' }}
+              </el-descriptions-item>
+                         </el-descriptions>
+          </div>
+        </el-dialog>
+      </div>
+    </div>
 
     <!-- 添加或修改设备对话框 -->
     <el-dialog :title="title" v-model="open" width="920px" append-to-body>
@@ -552,6 +850,21 @@ const multiple = ref(true);
 const total = ref(0);
 const title = ref("");
 
+// 机房可视化相关状态
+const viewMode = ref('list') // 'list' 或 'datacenter'
+const currentView = ref('dataCenter') // 'dataCenter' 或 'room' 或 'rack'
+const selectedDataCenter = ref('')
+const selectedRoom = ref('')
+const selectedRack = ref(null)
+const deviceDrawerVisible = ref(false)
+const selectedDevice = ref(null)
+const deviceInfoVisible = ref(false)
+
+// 数据中心数据
+const dataCenterData = ref({})
+const roomData = ref([])
+const rackData = ref([])
+
 /*** 设备导入参数 */
 const upload = reactive({
   // 是否显示弹出层（设备导入）
@@ -612,6 +925,11 @@ function getList() {
     if (response && response.rows) {
       deviceList.value = response.rows;
       total.value = response.total || 0;
+      
+      // 如果当前在机房视图模式，重新加载机房数据
+      if (viewMode.value === 'datacenter') {
+        loadDataCenterData();
+      }
     } else {
       console.error('响应数据格式错误:', response);
       deviceList.value = [];
@@ -982,5 +1300,906 @@ function handleGetConnectivityStats() {
   })
 }
 
+/** ================ 机房可视化相关函数 ================ */
+
+/** 位置解析工具函数 */
+function parseLocation(location) {
+  if (!location) return null
+  
+  // 解析 "XW_B1B04_21-24" 格式
+  const regex = /^([A-Z]{2})_([A-Z]+\d+)([A-Z]+\d+)_(\d+)-(\d+)$/
+  const match = location.match(regex)
+  
+  if (match) {
+    return {
+      dataCenter: match[1],        // XW
+      room: match[2],              // B1  
+      rack: match[3],              // B04
+      startU: parseInt(match[4]),  // 21
+      endU: parseInt(match[5]),    // 24
+      uRange: `${match[4]}-${match[5]}U`
+    }
+  }
+  return null
+}
+
+/** 获取数据中心名称 */
+function getDataCenterName(code) {
+  const dataCenterMap = {
+    'XW': '西五环',
+    'YJ': '翌景',
+    'YZ': '亦庄'
+  }
+  return dataCenterMap[code] || code
+}
+
+/** 处理视图模式变化 */
+function handleViewModeChange() {
+  if (viewMode.value === 'datacenter') {
+    currentView.value = 'dataCenter'
+    loadDataCenterData()
+  } else {
+    // 重置机房视图状态
+    currentView.value = 'dataCenter'
+    selectedDataCenter.value = ''
+    selectedRoom.value = ''
+    selectedRack.value = null
+    deviceDrawerVisible.value = false
+  }
+}
+
+/** 加载数据中心数据 */
+function loadDataCenterData() {
+  // 解析所有设备的位置信息
+  const parsedDevices = deviceList.value.map(device => ({
+    ...device,
+    locationInfo: parseLocation(device.location)
+  })).filter(device => device.locationInfo) // 过滤无效位置
+  
+  // 按数据中心分组统计
+  const dcStats = {}
+  
+  parsedDevices.forEach(device => {
+    const dc = device.locationInfo.dataCenter
+    if (!dcStats[dc]) {
+      dcStats[dc] = {
+        name: getDataCenterName(dc),
+        totalDevices: 0,
+        roomCount: new Set(),
+        healthStats: { ok: 0, warning: 0, unknown: 0 }
+      }
+    }
+    
+    dcStats[dc].totalDevices++
+    dcStats[dc].roomCount.add(device.locationInfo.room)
+    
+    // 统计健康状态
+    const healthStatus = device.healthStatus || 'unknown'
+    if (dcStats[dc].healthStats[healthStatus] !== undefined) {
+      dcStats[dc].healthStats[healthStatus]++
+    } else {
+      dcStats[dc].healthStats.unknown++
+    }
+  })
+  
+  // 转换roomCount为数字
+  Object.keys(dcStats).forEach(dc => {
+    dcStats[dc].roomCount = dcStats[dc].roomCount.size
+  })
+  
+  dataCenterData.value = dcStats
+}
+
+/** 选择数据中心 */
+function selectDataCenter(dcCode) {
+  selectedDataCenter.value = dcCode
+  currentView.value = 'room'
+  loadRoomData(dcCode)
+}
+
+/** 加载机房数据 */
+function loadRoomData(dcCode) {
+  const parsedDevices = deviceList.value.map(device => ({
+    ...device,
+    locationInfo: parseLocation(device.location)
+  })).filter(device => 
+    device.locationInfo && device.locationInfo.dataCenter === dcCode
+  )
+  
+  // 按机房分组统计
+  const roomStats = {}
+  
+  parsedDevices.forEach(device => {
+    const room = device.locationInfo.room
+    if (!roomStats[room]) {
+      roomStats[room] = {
+        code: room,
+        deviceCount: 0,
+        rackCount: new Set(),
+        healthStats: { ok: 0, warning: 0, unknown: 0 }
+      }
+    }
+    
+    roomStats[room].deviceCount++
+    roomStats[room].rackCount.add(device.locationInfo.rack)
+    
+    // 统计健康状态
+    const healthStatus = device.healthStatus || 'unknown'
+    if (roomStats[room].healthStats[healthStatus] !== undefined) {
+      roomStats[room].healthStats[healthStatus]++
+    } else {
+      roomStats[room].healthStats.unknown++
+    }
+  })
+  
+  // 转换为数组并处理rackCount
+  roomData.value = Object.values(roomStats).map(room => ({
+    ...room,
+    rackCount: room.rackCount.size
+  }))
+}
+
+/** 选择机房 */
+function selectRoom(roomCode) {
+  selectedRoom.value = roomCode
+  currentView.value = 'rack'
+  loadRackData(selectedDataCenter.value, roomCode)
+}
+
+/** 加载机柜数据 */
+function loadRackData(dcCode, roomCode) {
+  const parsedDevices = deviceList.value.map(device => ({
+    ...device,
+    locationInfo: parseLocation(device.location)
+  })).filter(device => 
+    device.locationInfo && 
+    device.locationInfo.dataCenter === dcCode &&
+    device.locationInfo.room === roomCode
+  )
+  
+  // 按机柜分组
+  const rackStats = {}
+  
+  parsedDevices.forEach(device => {
+    const rack = device.locationInfo.rack
+    if (!rackStats[rack]) {
+      rackStats[rack] = {
+        code: rack,
+        devices: [],
+        occupancyRate: 0
+      }
+    }
+    
+    rackStats[rack].devices.push({
+      ...device,
+      uRange: device.locationInfo.uRange
+    })
+  })
+  
+  // 计算占用率（假设每个机柜42U）
+  Object.values(rackStats).forEach(rack => {
+    const totalUUsed = rack.devices.reduce((sum, device) => {
+      const uRange = device.locationInfo
+      return sum + (uRange.endU - uRange.startU + 1)
+    }, 0)
+    rack.occupancyRate = Math.round((totalUUsed / 42) * 100)
+  })
+  
+  rackData.value = Object.values(rackStats)
+}
+
+/** 返回数据中心视图 */
+function backToDataCenter() {
+  currentView.value = 'dataCenter'
+  selectedDataCenter.value = ''
+  selectedRoom.value = ''
+  selectedRack.value = null
+  deviceDrawerVisible.value = false
+}
+
+/** 返回机房视图 */
+function backToRoom() {
+  currentView.value = 'room'
+  selectedRoom.value = ''
+  selectedRack.value = null
+  deviceDrawerVisible.value = false
+}
+
+/** 显示机柜详情 */
+function showRackDetails(rack) {
+  selectedRack.value = rack
+  deviceDrawerVisible.value = true
+}
+
+/** 显示设备信息 */
+function showDeviceInfo(device) {
+  selectedDevice.value = device
+  deviceInfoVisible.value = true
+}
+
+/** 获取数据中心健康状态样式类 */
+function getDataCenterHealthClass(healthStats) {
+  if ((healthStats.warning || 0) > 0) return 'health-warning'
+  if ((healthStats.ok || 0) > 0 && (healthStats.warning || 0) === 0) return 'health-ok'
+  return 'health-unknown'
+}
+
+/** 获取数据中心健康状态文本 */
+function getDataCenterHealthText(healthStats) {
+  if ((healthStats.warning || 0) > 0) return '有警告'
+  if ((healthStats.ok || 0) > 0 && (healthStats.warning || 0) === 0) return '正常'
+  return '未知'
+}
+
+/** 处理U位点击事件 */
+function handleUnitClick(unit, rack, event) {
+  event.stopPropagation() // 阻止事件冒泡
+  
+  if (unit.device) {
+    // 点击占用U位，显示设备详情
+    showDeviceInfo(unit.device)
+  } else {
+    // 点击空闲U位，显示机柜详情
+    showRackDetails(rack)
+  }
+}
+
+/** 获取机房状态样式类 */
+function getRoomStatusClass(room) {
+  const healthStats = room.healthStats
+  if (healthStats.warning > 0) return 'room-warning'
+  if (healthStats.ok === room.deviceCount) return 'room-healthy'
+  return 'room-unknown'
+}
+
+/** 获取机房健康状态样式类 */
+function getRoomHealthClass(room) {
+  const healthStats = room.healthStats
+  if (healthStats.warning > 0) return 'status-warning'
+  if (healthStats.ok === room.deviceCount) return 'status-healthy'
+  return 'status-unknown'
+}
+
+/** 获取机房健康状态文本 */
+function getRoomHealthText(room) {
+  const healthStats = room.healthStats
+  if (healthStats.warning > 0) return '有警告'
+  if (healthStats.ok === room.deviceCount) return '正常'
+  return '未知'
+}
+
+/** 获取机柜状态样式类 */
+function getRackStatusClass(rack) {
+  const hasWarning = rack.devices.some(device => device.healthStatus === 'warning')
+  if (hasWarning) return 'rack-warning'
+  
+  const allHealthy = rack.devices.every(device => device.healthStatus === 'ok')
+  if (allHealthy && rack.devices.length > 0) return 'rack-healthy'
+  
+  return 'rack-unknown'
+}
+
+/** 获取机柜占用率类型 */
+function getRackOccupancyType(rate) {
+  if (rate >= 80) return 'danger'
+  if (rate >= 60) return 'warning'
+  return 'success'
+}
+
+/** 获取设备健康状态样式类 */
+function getDeviceHealthClass(device) {
+  const statusMap = {
+    'ok': 'device-healthy',
+    'warning': 'device-warning',
+    'unknown': 'device-unknown'
+  }
+  return statusMap[device.healthStatus] || 'device-unknown'
+}
+
+/** 生成机柜U位布局 */
+function getRackUnits(rack) {
+  // 创建42个U位的数组（从42U到1U，顶部到底部）
+  const units = []
+  
+  // 初始化所有U位为空
+  for (let i = 42; i >= 1; i--) {
+    units.push({
+      unitNumber: i,
+      device: null,
+      isDeviceStart: false,
+      isDeviceMiddle: false,
+      deviceHeight: 0
+    })
+  }
+  
+  // 将设备分配到对应的U位
+  if (rack.devices && rack.devices.length > 0) {
+    rack.devices.forEach(device => {
+      const startU = device.locationInfo.startU
+      const endU = device.locationInfo.endU
+      const deviceHeight = endU - startU + 1
+      
+      // 为设备占用的每个U位分配状态
+      for (let u = startU; u <= endU; u++) {
+        const unitIndex = 42 - u // 数组索引（42U在索引0，1U在索引41）
+        if (unitIndex >= 0 && unitIndex < 42) {
+          units[unitIndex].device = device
+          
+          // 在最低位U位（startU）显示设备信息
+          if (u === startU) {
+            units[unitIndex].isDeviceStart = true
+            units[unitIndex].deviceHeight = deviceHeight
+          } else {
+            units[unitIndex].isDeviceMiddle = true
+          }
+        }
+      }
+    })
+  }
+  
+  return units
+}
+
 getList();
-</script> 
+</script>
+
+<style scoped>
+/* ================ 机房可视化样式 ================ */
+
+/* 面包屑导航 */
+.breadcrumb-link {
+  cursor: pointer;
+  color: #409eff;
+}
+
+.breadcrumb-link:hover {
+  color: #79bbff;
+}
+
+.breadcrumb-current {
+  color: #909399;
+}
+
+/* 数据中心总览 */
+.datacenter-container {
+  margin-top: 20px;
+}
+
+.datacenter-loading {
+  margin-top: 20px;
+  padding: 20px;
+}
+
+.datacenter-overview .overview-header {
+  margin-bottom: 20px;
+}
+
+.datacenter-cards {
+  margin-top: 20px;
+}
+
+/* 简洁数据中心卡片样式 */
+.datacenter-card-simple {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  height: 280px;
+  border-radius: 8px;
+}
+
+.datacenter-card-simple:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.datacenter-xw {
+  border-top: 4px solid #1890ff;
+}
+
+.datacenter-yj {
+  border-top: 4px solid #52c41a;
+}
+
+.datacenter-yz {
+  border-top: 4px solid #faad14;
+}
+
+.card-header-simple {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.title-section {
+  display: flex;
+  align-items: center;
+}
+
+.datacenter-icon-simple {
+  color: #409eff;
+  margin-right: 12px;
+}
+
+.datacenter-title-simple {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.health-indicator {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.health-indicator.health-ok {
+  background-color: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.health-indicator.health-warning {
+  background-color: #fffbe6;
+  color: #faad14;
+  border: 1px solid #ffe58f;
+}
+
+.health-indicator.health-unknown {
+  background-color: #f5f5f5;
+  color: #8c8c8c;
+  border: 1px solid #d9d9d9;
+}
+
+.stats-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  padding: 20px;
+  background: #fafafa;
+  border-radius: 6px;
+}
+
+.stat-item-simple {
+  text-align: center;
+  flex: 1;
+}
+
+.stat-value-simple {
+  font-size: 28px;
+  font-weight: 700;
+  color: #2c3e50;
+  margin-bottom: 6px;
+}
+
+.stat-label-simple {
+  font-size: 13px;
+  color: #8c8c8c;
+  font-weight: 500;
+}
+
+.stat-divider {
+  width: 1px;
+  height: 30px;
+  background: #e8e8e8;
+  margin: 0 16px;
+}
+
+.health-detail {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.health-item-simple {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: #666;
+  flex: 1;
+}
+
+.health-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+.health-ok {
+  background-color: #52c41a;
+}
+
+.health-warning {
+  background-color: #faad14;
+}
+
+.health-unknown {
+  background-color: #8c8c8c;
+}
+
+.health-text {
+  white-space: nowrap;
+}
+
+/* 机房视图 */
+.room-view {
+  margin-top: 20px;
+}
+
+.room-header h2 {
+  color: #2c3e50;
+  margin-bottom: 20px;
+  font-size: 20px;
+}
+
+.room-grid {
+  margin-top: 16px;
+}
+
+.room-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: 120px;
+}
+
+.room-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.room-healthy {
+  border-left: 4px solid #52c41a;
+}
+
+.room-warning {
+  border-left: 4px solid #faad14;
+}
+
+.room-unknown {
+  border-left: 4px solid #8c8c8c;
+}
+
+.room-info {
+  margin-bottom: 12px;
+}
+
+.room-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.room-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.room-status {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.status-healthy {
+  background-color: #f6ffed;
+  color: #52c41a;
+}
+
+.status-warning {
+  background-color: #fffbe6;
+  color: #faad14;
+}
+
+.status-unknown {
+  background-color: #f5f5f5;
+  color: #8c8c8c;
+}
+
+/* 机柜视图 */
+.rack-view {
+  margin-top: 20px;
+}
+
+.rack-header h2 {
+  color: #2c3e50;
+  margin-bottom: 20px;
+  font-size: 20px;
+}
+
+.rack-grid {
+  margin-top: 16px;
+}
+
+.rack-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rack-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.rack-healthy {
+  border-left: 3px solid #52c41a;
+}
+
+.rack-warning {
+  border-left: 3px solid #faad14;
+}
+
+.rack-unknown {
+  border-left: 3px solid #8c8c8c;
+}
+
+.rack-header-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.rack-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.rack-units {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rack-scale {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid #a5a4a4;
+  /* border-radius: 4px; */
+  background: #ffffff;
+  position: relative;
+}
+
+.unit-slot {
+  display: flex;
+  align-items: center;
+  height: 13px;
+  position: relative;
+  font-size: 8px;
+  border-bottom: 1.5px solid #c7c6c6;
+}
+
+.unit-slot:last-child {
+  border-bottom: none;
+}
+
+.unit-number {
+  width: 22px;
+  text-align: center;
+  font-size: 9px; 
+  color: #999;
+  font-weight: 400;
+  background: #fafafa;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.unit-device {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 3px;
+  height: 100%;
+}
+
+.unit-empty-space {
+  flex: 1;
+  height: 100%;
+  background: #ffffff;
+}
+
+.unit-empty {
+  background-color: #ffffff;
+}
+
+.unit-occupied {
+  position: relative;
+  border-left: 2px solid transparent;
+}
+
+.unit-occupied.device-healthy {
+  background-color: #e8f5e8;
+  border-left-color: #52c41a;
+}
+
+.unit-occupied.device-warning {
+  background-color: #fdefbe;
+  border-left-color: #faad14;
+}
+
+.unit-occupied.device-unknown {
+  background-color: #e5e3e3;
+  border-left-color: #d9d9d9;
+}
+
+.device-name {
+  font-weight: 400;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 7px;
+  flex: 1;
+}
+
+/* 合并设备显示样式 */
+.unit-device-merged {
+  position: absolute;
+  left: 22px;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 0 2px 2px 0;
+  padding: 2px 4px;
+  border: 1px solid;
+  border-left: none;
+  box-sizing: border-box;
+}
+
+.unit-device-middle {
+  flex: 1;
+  height: 100%;
+}
+
+.unit-occupied.device-middle {
+  border-top: none;
+  border-bottom: none;
+}
+
+.unit-occupied.device-healthy .unit-device-merged {
+  background-color: #e8f5e8;
+  border-color: #52c41a;
+}
+
+.unit-occupied.device-warning .unit-device-merged {
+  background-color: #fdefbe;
+  border-color: #faad14;
+}
+
+.unit-occupied.device-unknown .unit-device-merged {
+  background-color: #e5e3e3;
+  border-color: #d9d9d9;
+}
+
+.device-name-merged {
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.device-range {
+  font-size: 7px;
+  color: #666;
+  text-align: center;
+  margin-top: 1px;
+}
+
+/* 可点击U位样式 */
+.unit-clickable {
+  cursor: pointer;
+}
+
+.unit-clickable:hover {
+  opacity: 0.8;
+  transition: all 0.2s ease;
+}
+
+.unit-clickable.unit-occupied:hover {
+  transform: scale(1.02);
+}
+
+.unit-clickable.unit-empty:hover {
+  background-color: #f5f5f5;
+}
+
+.no-devices {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 60px;
+  color: #8c8c8c;
+  font-size: 12px;
+  border: 1px dashed #d9d9d9;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+/* 设备详情抽屉 */
+.device-details {
+  padding: 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .datacenter-card-simple {
+    height: auto;
+    min-height: 200px;
+  }
+  
+  .stats-section {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .stat-divider {
+    display: none;
+  }
+  
+  .health-detail {
+    flex-direction: column;
+    gap: 6px;
+  }
+  
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .datacenter-icon {
+    margin-bottom: 8px;
+  }
+  
+  .datacenter-stats {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .stat-item {
+    text-align: left;
+  }
+  
+  .health-distribution {
+    justify-content: flex-start;
+  }
+  
+  .room-card,
+  .rack-card {
+    height: auto;
+    min-height: 100px;
+  }
+}
+
+/* 工具类 */
+.mb-4 {
+  margin-bottom: 16px;
+}
+
+.mb-3 {
+  margin-bottom: 12px;
+}
+</style> 
