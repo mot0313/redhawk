@@ -4,161 +4,74 @@
     <el-row :gutter="10" class="mb20">
       <el-col :span="1.5">
         <el-button-group>
-          <el-button
-            :type="viewMode === 'list' ? 'primary' : 'default'"
-            icon="List"
-            @click="viewMode = 'list'; handleViewModeChange()"
-          >列表视图</el-button>
-          <el-button
-            :type="viewMode === 'datacenter' ? 'primary' : 'default'"
-            icon="OfficeBuilding"
-            @click="viewMode = 'datacenter'; handleViewModeChange()"
-          >机房视图</el-button>
+          <el-button :type="viewMode === 'list' ? 'primary' : 'default'" icon="List"
+            @click="viewMode = 'list'; handleViewModeChange()">列表视图</el-button>
+          <el-button :type="viewMode === 'datacenter' ? 'primary' : 'default'" icon="OfficeBuilding"
+            @click="viewMode = 'datacenter'; handleViewModeChange()">机房视图</el-button>
         </el-button-group>
       </el-col>
       <el-col :span="1.5">
-        <el-button
-          type="primary"
-          plain
-          icon="Plus"
-          @click="handleAdd"
-          v-hasPermi="['redfish:device:add']"
-          v-show="viewMode === 'list'"
-        >新增</el-button>
+        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['redfish:device:add']"
+          v-show="viewMode === 'list'">新增</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button
-          type="success"
-          plain
-          icon="Edit"
-          :disabled="single"
-          @click="handleUpdate"
-          v-hasPermi="['redfish:device:edit']"
-          v-show="viewMode === 'list'"
-        >修改</el-button>
+        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate"
+          v-hasPermi="['redfish:device:edit']" v-show="viewMode === 'list'">修改</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button
-          type="danger"
-          plain
-          icon="Delete"
-          :disabled="multiple"
-          @click="handleDelete"
-          v-hasPermi="['redfish:device:remove']"
-          v-show="viewMode === 'list'"
-        >删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete"
+          v-hasPermi="['redfish:device:remove']" v-show="viewMode === 'list'">删除</el-button>
+      </el-col>
+
+      <el-col :span="1.5">
+        <el-button type="info" plain icon="Upload" @click="handleImport" v-hasPermi="['redfish:device:import']"
+          v-show="viewMode === 'list'">导入</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button
-          type="info"
-          plain
-          icon="Connection"
-          :disabled="single"
-          @click="handleTestConnection"
-          v-hasPermi="['redfish:device:test']"
-          v-show="viewMode === 'list'"
-        >测试连接</el-button>
+        <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['redfish:device:export']"
+          v-show="viewMode === 'list'">导出</el-button>
+      </el-col>
+      <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" :columns="columns"
+        v-show="viewMode === 'list'"></right-toolbar>
+
+      <el-col :span="1.5">
+        <el-tooltip content="业务连通性测试" placement="top">
+          <el-button circle icon="Connection" @click="handleBatchCheckConnectivity" :disabled="multiple"
+            v-show="viewMode === 'list'"></el-button>
+        </el-tooltip>
       </el-col>
       <el-col :span="1.5">
-        <el-button
-          type="info"
-          plain
-          icon="Upload"
-          @click="handleImport"
-          v-hasPermi="['redfish:device:import']"
-          v-show="viewMode === 'list'"
-        >导入</el-button>
+        <el-tooltip content="业务连通性统计" placement="top">
+          <el-button circle icon="DataAnalysis" @click="handleGetConnectivityStats"
+            v-show="viewMode === 'list'"></el-button>
+        </el-tooltip>
       </el-col>
-      <el-col :span="1.5">
-        <el-button
-          type="warning"
-          plain
-          icon="Download"
-          @click="handleExport"
-          v-hasPermi="['redfish:device:export']"
-          v-show="viewMode === 'list'"
-        >导出</el-button>
-      </el-col>
-      <el-col :span="1.5">
-        <el-button
-          type="info"
-          plain
-          icon="Connection"
-          @click="handleBatchCheckConnectivity"
-          :disabled="multiple"
-          v-show="viewMode === 'list'"
-        >批量检测连通性</el-button>
-      </el-col>
-      <el-col :span="1.5">
-        <el-button
-          type="warning"
-          plain
-          icon="DataAnalysis"
-          @click="handleGetConnectivityStats"
-          v-show="viewMode === 'list'"
-        >连通性统计</el-button>
-      </el-col>
-      <right-toolbar
-        v-model:showSearch="showSearch"
-        @queryTable="getList"
-        :columns="columns"
-        v-show="viewMode === 'list'"
-      ></right-toolbar>
+
     </el-row>
 
-    <el-form
-      :model="queryParams"
-      ref="queryRef"
-      :inline="true"
-      v-show="showSearch && viewMode === 'list'"
-      label-width="68px"
-    >
+    <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch && viewMode === 'list'"
+      label-width="68px">
       <el-form-item label="主机名" prop="hostname">
-        <el-input
-          v-model="queryParams.hostname"
-          placeholder="请输入主机名"
-          clearable
-          style="width: 150px"
-          @keyup.enter="handleQuery"
-        />
+        <el-input v-model="queryParams.hostname" placeholder="请输入主机名" clearable style="width: 150px"
+          @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="业务IP" prop="businessIp">
-        <el-input
-          v-model="queryParams.businessIp"
-          placeholder="请输入业务IP"
-          clearable
-          style="width: 150px"
-          @keyup.enter="handleQuery"
-        />
+        <el-input v-model="queryParams.businessIp" placeholder="请输入业务IP" clearable style="width: 150px"
+          @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="带外IP" prop="oobIp">
-        <el-input
-          v-model="queryParams.oobIp"
-          placeholder="请输入带外IP"
-          clearable
-          style="width: 150px"
-          @keyup.enter="handleQuery"
-        />
+        <el-input v-model="queryParams.oobIp" placeholder="请输入带外IP" clearable style="width: 150px"
+          @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="健康状态" prop="healthStatus">
-        <el-select
-          v-model="queryParams.healthStatus"
-          placeholder="健康状态"
-          clearable
-          style="width: 100px"
-        >
+        <el-select v-model="queryParams.healthStatus" placeholder="健康状态" clearable style="width: 100px">
           <el-option label="正常" value="ok" />
           <el-option label="警告" value="warning" />
           <el-option label="未知" value="unknown" />
         </el-select>
       </el-form-item>
       <el-form-item label="监控状态" prop="monitorEnabled">
-        <el-select
-          v-model="queryParams.monitorEnabled"
-          placeholder="监控状态"
-          clearable
-          style="width: 100px"
-        >
+        <el-select v-model="queryParams.monitorEnabled" placeholder="监控状态" clearable style="width: 100px">
           <el-option label="启用" :value="1" />
           <el-option label="禁用" :value="0" />
         </el-select>
@@ -170,185 +83,121 @@
     </el-form>
 
 
-    <el-table
-      ref="deviceListRef"
-      v-loading="loading"
-      :data="deviceList"
-      @selection-change="handleSelectionChange"
-      v-show="viewMode === 'list'"
-    >
+    <el-table ref="deviceListRef" v-loading="loading" :data="deviceList" border
+      @selection-change="handleSelectionChange" v-show="viewMode === 'list'">
       <el-table-column type="selection" width="50" align="center" />
-      <el-table-column
-        label="序号"
-        align="center"
-        key="index"
-        width="50"
-        v-if="columns[0].visible"
-      >
+      <el-table-column label="序号" align="center" key="index" width="50" v-if="columns[0].visible">
         <template #default="scope">
           {{ (queryParams.pageNum - 1) * queryParams.pageSize + scope.$index + 1 }}
         </template>
       </el-table-column>
-      <el-table-column
-        label="主机名"
-        align="center"
-        key="hostname"
-        prop="hostname"
-        v-if="columns[1].visible"
-        :show-overflow-tooltip="true"
-      />
-      <el-table-column
-        label="业务IP"
-        align="center"
-        key="businessIp"
-        prop="businessIp"
-        v-if="columns[2].visible"
-        width="140"
-      />
-      <el-table-column
-        label="带外IP"
-        align="center"
-        key="oobIp"
-        prop="oobIp"
-        v-if="columns[3].visible"
-        width="140"
-      />
-      <el-table-column
-        label="机房位置"
-        align="center"
-        key="location"
-        prop="location"
-        v-if="columns[4].visible"
-        :show-overflow-tooltip="true"
-      />
-      <el-table-column
-        label="序列号"
-        align="center"
-        key="serialNumber"
-        prop="serialNumber"
-        v-if="columns[5].visible"
-        :show-overflow-tooltip="true"
-      />
-      <el-table-column
-        label="系统负责人"
-        align="center"
-        key="systemOwner"
-        prop="systemOwner"
-        v-if="columns[6].visible"
-        width="100"
-      />
-      <el-table-column
-        label="健康状态"
-        align="center"
-        key="healthStatus"
-        prop="healthStatus"
-        v-if="columns[7].visible"
-        width="100"
-      >
+      <el-table-column label="主机名" align="center" key="hostname" prop="hostname" v-if="columns[1].visible"
+        :show-overflow-tooltip="true" />
+      <el-table-column label="业务IP" align="center" key="businessIp" prop="businessIp" v-if="columns[2].visible"
+        width="140" />
+      <el-table-column label="带外IP" align="center" key="oobIp" prop="oobIp" v-if="columns[3].visible" width="140" />
+      <el-table-column label="机房位置" align="center" key="location" prop="location" v-if="columns[4].visible">
         <template #default="scope">
-          <el-tag
-            :type="getHealthStatusType(scope.row.healthStatus)"
-            disable-transitions
+          <div 
+            class="copyable-cell" 
+            @click="copyToClipboard(scope.row.location, '机房位置', $event)"
+            :title="`点击复制机房位置: ${scope.row.location}`"
           >
+            <span class="copyable-text">{{ scope.row.location }}</span>
+            <el-icon class="copy-icon" size="12">
+              <CopyDocument />
+            </el-icon>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="序列号" align="center" key="serialNumber" prop="serialNumber" v-if="columns[5].visible">
+        <template #default="scope">
+          <div 
+            class="copyable-cell" 
+            @click="copyToClipboard(scope.row.serialNumber, '序列号', $event)"
+            :title="`点击复制序列号: ${scope.row.serialNumber}`"
+          >
+            <span class="copyable-text">{{ scope.row.serialNumber || '未设置' }}</span>
+            <el-icon class="copy-icon" size="12">
+              <CopyDocument />
+            </el-icon>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="系统负责人" align="center" key="systemOwner" prop="systemOwner" v-if="columns[6].visible"
+        width="80" />
+      <el-table-column label="健康状态" align="center" key="healthStatus" prop="healthStatus" v-if="columns[7].visible"
+        width="80">
+        <template #default="scope">
+          <el-tag :type="getHealthStatusType(scope.row.healthStatus)" disable-transitions>
             {{ getHealthStatusText(scope.row.healthStatus) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column
-        label="监控状态"
-        align="center"
-        key="monitorEnabled"
-        prop="monitorEnabled"
-        v-if="columns[8].visible"
-        width="100"
-      >
+
+      <el-table-column label="连通状态" align="center" key="connectivityStatus" v-if="columns[9].visible" width="80">
         <template #default="scope">
-          <el-switch
-            v-model="scope.row.monitorEnabled"
-            :active-value="1"
-            :inactive-value="0"
-            @change="handleMonitorChange(scope.row)"
-            v-hasPermi="['redfish:device:edit']"
-            :disabled="loading"
-          />
+          <div class="connectivity-status">
+            <!-- 连通性状态 -->
+            <el-tag v-if="scope.row.connectivityResult"
+              :type="scope.row.connectivityResult.online ? 'success' : 'danger'" size="small" class="connectivity-tag">
+              <el-icon style="margin-right: 2px">
+                <Check v-if="scope.row.connectivityResult.online" />
+                <Close v-else />
+              </el-icon>
+              {{ scope.row.connectivityResult.online ? '在线' : '离线' }}
+            </el-tag>
+            <span v-else class="no-test">未检测</span>
+
+            <!-- Ping响应时间 -->
+            <div v-if="scope.row.connectivityResult?.check_details?.ping?.response_time"
+              :class="['ping-time', getPingResponseClass(scope.row.connectivityResult.check_details.ping.response_time)]">
+              {{ scope.row.connectivityResult.check_details.ping.response_time }}
+            </div>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column
-        label="最后检查时间"
-        align="center"
-        key="lastCheckTime"
-        prop="lastCheckTime"
-        v-if="columns[9].visible"
-        width="150"
-      >
+      <el-table-column label="监控状态" align="center" key="monitorEnabled" prop="monitorEnabled" v-if="columns[8].visible"
+        width="80">
+        <template #default="scope">
+          <el-switch v-model="scope.row.monitorEnabled" :active-value="1" :inactive-value="0"
+            @change="handleMonitorChange(scope.row)" v-hasPermi="['redfish:device:edit']" :disabled="loading" />
+        </template>
+      </el-table-column>
+      <el-table-column label="最后检查时间" align="center" key="lastCheckTime" prop="lastCheckTime" v-if="columns[10].visible"
+        width="110">
         <template #default="scope">
           <span>{{ parseTime(scope.row.lastCheckTime) }}</span>
         </template>
       </el-table-column>
-      <el-table-column
-        label="操作"
-        align="center"
-        width="280"
-        fixed="right"
-        class-name="small-padding fixed-width"
-      >
+      <el-table-column label="操作" align="center" width="180" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip content="查看详情" placement="top">
-            <el-button
-              link
-              type="primary"
-              icon="View"
-              @click="handleUpdate(scope.row)"
-              v-hasPermi="['redfish:device:query']"
-            ></el-button>
+            <el-button link type="primary" icon="View" @click="handleUpdate(scope.row)"
+              v-hasPermi="['redfish:device:query']"></el-button>
           </el-tooltip>
           <el-tooltip content="修改" placement="top">
-            <el-button
-              link
-              type="primary"
-              icon="Edit"
-              @click="handleUpdate(scope.row)"
-              v-hasPermi="['redfish:device:edit']"
-            ></el-button>
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)"
+              v-hasPermi="['redfish:device:edit']"></el-button>
           </el-tooltip>
           <el-tooltip content="Redfish连接测试" placement="top">
-            <el-button
-              link
-              type="warning"
-              icon="Link"
-              @click="handleTestConnection(scope.row)"
-              v-hasPermi="['redfish:device:test']"
-            ></el-button>
+            <el-button link type="warning" icon="Link" @click="handleTestConnection(scope.row)"
+              v-hasPermi="['redfish:device:test']"></el-button>
           </el-tooltip>
           <el-tooltip content="业务IP连通性检测" placement="top">
-            <el-button
-              link
-              type="info"
-              icon="Connection"
-              @click="handleCheckConnectivity(scope.row)"
-              v-hasPermi="['redfish:device:test']"
-            ></el-button>
+            <el-button link type="info" icon="Connection" @click="handleCheckConnectivity(scope.row)"
+              v-hasPermi="['redfish:device:test']"></el-button>
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
-            <el-button
-              link
-              type="danger"
-              icon="Delete"
-              @click="handleDelete(scope.row)"
-              v-hasPermi="['redfish:device:remove']"
-            ></el-button>
+            <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)"
+              v-hasPermi="['redfish:device:remove']"></el-button>
           </el-tooltip>
         </template>
       </el-table-column>
     </el-table>
 
-    <pagination
-      v-show="total > 0 && viewMode === 'list'"
-      :total="total"
-      v-model:page="queryParams.pageNum"
-      v-model:limit="queryParams.pageSize"
-      @pagination="getList"
-    />
+    <pagination v-show="total > 0 && viewMode === 'list'" :total="total" v-model:page="queryParams.pageNum"
+      v-model:limit="queryParams.pageSize" @pagination="getList" />
 
     <!-- 机房可视化视图 -->
     <div v-show="viewMode === 'datacenter'" class="datacenter-container">
@@ -370,30 +219,14 @@
         <!-- 数据中心总览 -->
         <div v-if="currentView === 'dataCenter'" class="datacenter-overview">
           <div class="overview-header">
-            <el-alert
-              title="机房可视化说明"
-              description="此视图显示设备在数据中心的分布情况。绿色表示设备正常，黄色表示有警告，红色表示有严重问题。点击数据中心可查看详细机房分布。"
-              type="info"
-              :closable="false"
-              show-icon
-              class="mb-4"
-            />
+            <el-alert title="机房可视化说明" description="此视图显示设备在数据中心的分布情况。绿色表示设备正常，黄色表示有警告，灰色表示未知状态。点击数据中心可查看详细机房分布。"
+              type="info" :closable="false" show-icon class="mb-4" />
           </div>
-          
+
           <el-row :gutter="20" class="datacenter-cards">
-            <el-col 
-              :xl="6" :lg="8" :md="12" :sm="24" 
-              v-for="(dc, code) in dataCenterData" 
-              :key="code"
-              class="mb-4"
-            >
-              <el-card 
-                :body-style="{ padding: '24px' }"
-                shadow="hover"
-                class="datacenter-card-simple"
-                :class="`datacenter-${code.toLowerCase()}`"
-                @click="selectDataCenter(code)"
-              >
+            <el-col :xl="6" :lg="8" :md="12" :sm="24" v-for="(dc, code) in dataCenterData" :key="code" class="mb-4">
+              <el-card :body-style="{ padding: '24px' }" shadow="hover" class="datacenter-card-simple"
+                :class="`datacenter-${code.toLowerCase()}`" @click="selectDataCenter(code)">
                 <div class="card-header-simple">
                   <div class="title-section">
                     <el-icon size="28" class="datacenter-icon-simple">
@@ -405,7 +238,7 @@
                     {{ getDataCenterHealthText(dc.healthStats) }}
                   </div>
                 </div>
-                
+
                 <div class="stats-section">
                   <div class="stat-item-simple">
                     <div class="stat-value-simple">{{ dc.totalDevices }}</div>
@@ -442,21 +275,11 @@
           <div class="room-header">
             <h2>{{ getDataCenterName(selectedDataCenter) }} - 机房分布</h2>
           </div>
-          
+
           <el-row :gutter="16" class="room-grid">
-            <el-col 
-              :xl="6" :lg="8" :md="12" :sm="24"
-              v-for="room in roomData"
-              :key="room.code"
-              class="mb-3"
-            >
-              <el-card 
-                :body-style="{ padding: '16px' }"
-                shadow="hover"
-                class="room-card"
-                :class="getRoomStatusClass(room)"
-                @click="selectRoom(room.code)"
-              >
+            <el-col :xl="6" :lg="8" :md="12" :sm="24" v-for="room in roomData" :key="room.code" class="mb-3">
+              <el-card :body-style="{ padding: '16px' }" shadow="hover" class="room-card"
+                :class="getRoomStatusClass(room)" @click="selectRoom(room.code)">
                 <div class="room-info">
                   <h4 class="room-title">{{ room.code }}</h4>
                   <div class="room-stats">
@@ -477,55 +300,39 @@
           <div class="rack-header">
             <h2>{{ selectedRoom }} - 机柜分布</h2>
           </div>
-          
+
           <el-row :gutter="12" class="rack-grid">
-            <el-col 
-              :xl="4" :lg="6" :md="8" :sm="12"
-              v-for="rack in rackData"
-              :key="rack.code"
-              class="mb-3"
-            >
-              <el-card 
-                :body-style="{ padding: '12px' }"
-                shadow="hover"
-                class="rack-card"
-                :class="getRackStatusClass(rack)"
-              >
+            <el-col :xl="4" :lg="6" :md="8" :sm="12" v-for="rack in rackData" :key="rack.code" class="mb-3">
+              <el-card :body-style="{ padding: '12px' }" shadow="hover" class="rack-card"
+                :class="getRackStatusClass(rack)">
                 <div class="rack-header-info">
                   <h5 class="rack-title">{{ rack.code }}</h5>
-                  <el-tag 
-                    size="small" 
-                    :type="getRackOccupancyType(rack.occupancyRate)"
-                  >
+                  <el-tag size="small" :type="getRackOccupancyType(rack.occupancyRate)">
                     {{ rack.occupancyRate }}%
                   </el-tag>
                 </div>
-                
+
                 <div class="rack-units">
                   <div class="rack-scale">
-                                          <div 
-                        v-for="unit in getRackUnits(rack)" 
-                        :key="unit.unitNumber"
-                        class="unit-slot"
-                        :class="[
-                          unit.device ? `unit-occupied ${getDeviceHealthClass(unit.device)}` : 'unit-empty',
-                          unit.isDeviceStart ? 'device-start' : '',
-                          unit.isDeviceMiddle ? 'device-middle' : '',
-                          'unit-clickable'
-                        ]"
-                        :title="unit.device ? `${unit.device.hostname} (${unit.device.uRange}) - 点击查看设备详情` : `${unit.unitNumber}U - 空闲，点击查看机柜详情`"
-                        @click="handleUnitClick(unit, rack, $event)"
-                      >
-                        <div class="unit-number">{{ unit.unitNumber }}</div>
-                                                 <div v-if="unit.isDeviceStart" class="unit-device-merged" :style="{ height: (unit.deviceHeight * 13) + 'px' }">
-                          <div class="device-name-merged">{{ unit.device.hostname }}</div>
-                          <div class="device-range">{{ unit.device.uRange }}</div>
-                        </div>
-                        <div v-else-if="unit.isDeviceMiddle" class="unit-device-middle">
-                          <!-- 设备占用的中间部分 -->
-                        </div>
-                        <div v-else class="unit-empty-space"></div>
+                    <div v-for="unit in getRackUnits(rack)" :key="unit.unitNumber" class="unit-slot" :class="[
+                      unit.device ? `unit-occupied ${getDeviceHealthClass(unit.device)}` : 'unit-empty',
+                      unit.isDeviceStart ? 'device-start' : '',
+                      unit.isDeviceMiddle ? 'device-middle' : '',
+                      'unit-clickable'
+                    ]"
+                      :title="unit.device ? `${unit.device.hostname} (${unit.device.uRange}) - 点击查看设备详情` : `${unit.unitNumber}U - 空闲，点击查看机柜详情`"
+                      @click="handleUnitClick(unit, rack, $event)">
+                      <div class="unit-number">{{ unit.unitNumber }}</div>
+                      <div v-if="unit.isDeviceStart" class="unit-device-merged"
+                        :style="{ height: (unit.deviceHeight * 13) + 'px' }">
+                        <div class="device-name-merged">{{ unit.device.hostname }}</div>
+                        <div class="device-range">{{ unit.device.uRange }}</div>
                       </div>
+                      <div v-else-if="unit.isDeviceMiddle" class="unit-device-middle">
+                        <!-- 设备占用的中间部分 -->
+                      </div>
+                      <div v-else class="unit-empty-space"></div>
+                    </div>
                   </div>
                   <div v-if="rack.devices.length === 0" class="no-devices">
                     无设备
@@ -537,12 +344,8 @@
         </div>
 
         <!-- 设备详情抽屉 -->
-        <el-drawer
-          v-model="deviceDrawerVisible"
-          :title="`机柜 ${selectedRack?.code} - 设备详情`"
-          direction="rtl"
-          size="600px"
-        >
+        <el-drawer v-model="deviceDrawerVisible" :title="`机柜 ${selectedRack?.code} - 设备详情`" direction="rtl"
+          size="600px">
           <div v-if="selectedRack" class="device-details">
             <el-table :data="selectedRack.devices" style="width: 100%">
               <el-table-column prop="hostname" label="设备名称" />
@@ -557,12 +360,7 @@
               </el-table-column>
               <el-table-column label="操作" width="100">
                 <template #default="scope">
-                  <el-button 
-                    link 
-                    type="primary" 
-                    @click="handleDetail(scope.row)"
-                    size="small"
-                  >
+                  <el-button link type="primary" @click="handleDetail(scope.row)" size="small">
                     详情
                   </el-button>
                 </template>
@@ -572,12 +370,8 @@
         </el-drawer>
 
         <!-- 设备信息弹窗 -->
-        <el-dialog
-          v-model="deviceInfoVisible"
-          :title="`设备信息 - ${selectedDevice?.hostname || ''}`"
-          width="500px"
-          @close="selectedDevice = null"
-        >
+        <el-dialog v-model="deviceInfoVisible" :title="`设备信息 - ${selectedDevice?.hostname || ''}`" width="500px"
+          @close="selectedDevice = null">
           <div v-if="selectedDevice" class="device-info-content">
             <el-descriptions :column="2" border>
               <el-descriptions-item label="主机名">
@@ -593,7 +387,16 @@
                 {{ selectedDevice.uRange }}
               </el-descriptions-item>
               <el-descriptions-item label="机房位置">
-                {{ selectedDevice.location }}
+                <div 
+                  class="copyable-cell detail-copyable" 
+                  @click="copyToClipboard(selectedDevice.location, '机房位置', $event)"
+                  :title="`点击复制机房位置: ${selectedDevice.location}`"
+                >
+                  <span>{{ selectedDevice.location }}</span>
+                  <el-icon class="copy-icon" size="12">
+                    <CopyDocument />
+                  </el-icon>
+                </div>
               </el-descriptions-item>
               <el-descriptions-item label="健康状态">
                 <el-tag :type="getHealthStatusType(selectedDevice.healthStatus)">
@@ -613,12 +416,21 @@
                 {{ selectedDevice.manufacturer || '-' }}
               </el-descriptions-item>
               <el-descriptions-item label="序列号">
-                {{ selectedDevice.serialNumber || '-' }}
+                <div 
+                  class="copyable-cell detail-copyable" 
+                  @click="copyToClipboard(selectedDevice.serialNumber, '序列号', $event)"
+                  :title="`点击复制序列号: ${selectedDevice.serialNumber}`"
+                >
+                  <span>{{ selectedDevice.serialNumber || '-' }}</span>
+                  <el-icon class="copy-icon" size="12">
+                    <CopyDocument />
+                  </el-icon>
+                </div>
               </el-descriptions-item>
               <el-descriptions-item label="技术系统">
                 {{ selectedDevice.technicalSystem || '-' }}
               </el-descriptions-item>
-                         </el-descriptions>
+            </el-descriptions>
           </div>
         </el-dialog>
       </div>
@@ -695,18 +507,9 @@
           </el-col>
           <el-col :span="11">
             <el-form-item label="业务类型" prop="businessType">
-              <el-select 
-                v-model="form.businessType" 
-                placeholder="请选择业务类型" 
-                clearable 
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="item in businessTypes"
-                  :key="item.typeCode"
-                  :label="item.typeName"
-                  :value="item.typeCode"
-                >
+              <el-select v-model="form.businessType" placeholder="请选择业务类型" clearable style="width: 100%">
+                <el-option v-for="item in businessTypes" :key="item.typeCode" :label="item.typeName"
+                  :value="item.typeCode">
                   {{ item.typeName }}
                 </el-option>
               </el-select>
@@ -751,9 +554,31 @@
         <el-descriptions-item label="业务IP">{{ detailForm.businessIp || '未设置' }}</el-descriptions-item>
         <el-descriptions-item label="带外IP">{{ detailForm.oobIp }}</el-descriptions-item>
         <el-descriptions-item label="带外端口">{{ detailForm.oobPort }}</el-descriptions-item>
-        <el-descriptions-item label="机房位置">{{ detailForm.location }}</el-descriptions-item>
+        <el-descriptions-item label="机房位置">
+          <div 
+            class="copyable-cell detail-copyable" 
+            @click="copyToClipboard(detailForm.location, '机房位置', $event)"
+            :title="`点击复制机房位置: ${detailForm.location}`"
+          >
+            <span>{{ detailForm.location }}</span>
+            <el-icon class="copy-icon" size="12">
+              <CopyDocument />
+            </el-icon>
+          </div>
+        </el-descriptions-item>
         <el-descriptions-item label="操作系统">{{ detailForm.operatingSystem || '未知' }}</el-descriptions-item>
-        <el-descriptions-item label="序列号">{{ detailForm.serialNumber || '未知' }}</el-descriptions-item>
+        <el-descriptions-item label="序列号">
+          <div 
+            class="copyable-cell detail-copyable" 
+            @click="copyToClipboard(detailForm.serialNumber, '序列号', $event)"
+            :title="`点击复制序列号: ${detailForm.serialNumber}`"
+          >
+            <span>{{ detailForm.serialNumber || '未知' }}</span>
+            <el-icon class="copy-icon" size="12">
+              <CopyDocument />
+            </el-icon>
+          </div>
+        </el-descriptions-item>
         <el-descriptions-item label="设备型号">{{ detailForm.model || '未知' }}</el-descriptions-item>
         <el-descriptions-item label="厂商">{{ detailForm.manufacturer || '未知' }}</el-descriptions-item>
         <el-descriptions-item label="技术系统">{{ detailForm.technicalSystem || '未设置' }}</el-descriptions-item>
@@ -781,35 +606,19 @@
 
     <!-- 设备导入对话框 -->
     <el-dialog :title="upload.title" v-model="upload.open" width="400px" append-to-body>
-      <el-upload
-        ref="uploadRef"
-        :limit="1"
-        accept=".xlsx, .xls"
-        :headers="upload.headers"
-        :action="upload.url + '?updateSupport=' + upload.updateSupport"
-        :disabled="upload.isUploading"
-        :on-progress="handleFileUploadProgress"
-        :on-success="handleFileSuccess"
-        :auto-upload="false"
-        drag
-      >
+      <el-upload ref="uploadRef" :limit="1" accept=".xlsx, .xls" :headers="upload.headers"
+        :action="upload.url + '?updateSupport=' + upload.updateSupport" :disabled="upload.isUploading"
+        :on-progress="handleFileUploadProgress" :on-success="handleFileSuccess" :auto-upload="false" drag>
         <el-icon class="el-icon--upload"><upload-filled /></el-icon>
         <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
         <template #tip>
           <div class="el-upload__tip text-center">
             <div class="el-upload__tip">
-              <el-checkbox
-                v-model="upload.updateSupport"
-              />是否更新已经存在的设备数据
+              <el-checkbox v-model="upload.updateSupport" />是否更新已经存在的设备数据
             </div>
             <span>仅允许导入xls、xlsx格式文件。</span>
-            <el-link
-              type="primary"
-              :underline="false"
-              style="font-size: 12px; vertical-align: baseline"
-              @click="importTemplate"
-              >下载模板</el-link
-            >
+            <el-link type="primary" :underline="false" style="font-size: 12px; vertical-align: baseline"
+              @click="importTemplate">下载模板</el-link>
           </div>
         </template>
       </el-upload>
@@ -820,6 +629,214 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 连通性统计对话框 -->
+    <el-dialog title="业务连通性统计" v-model="connectivityStatsVisible" width="900px" append-to-body>
+      <div class="connectivity-stats-container">
+        <!-- 整体概览 -->
+        <div class="stats-overview">
+          <div class="overview-card">
+            <div class="card-content">
+              <div class="stats-header">
+                <el-icon size="24" color="#409eff">
+                  <Monitor />
+                </el-icon>
+                <h3>连通性概览</h3>
+              </div>
+
+              <!-- 环形进度条 -->
+              <div class="circular-progress">
+                <el-progress type="circle" :percentage="connectivityStatsData.onlineRate" :width="120" :stroke-width="8"
+                  :color="getProgressColor(connectivityStatsData.onlineRate)">
+                  <template #default="{ percentage }">
+                    <span class="progress-text">
+                      <div class="percentage">{{ percentage }}%</div>
+                      <div class="label">在线率</div>
+                    </span>
+                  </template>
+                </el-progress>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 详细统计 -->
+        <div class="stats-details">
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <div class="stat-card total">
+                <div class="stat-icon">
+                  <el-icon size="20">
+                    <Cpu />
+                  </el-icon>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ connectivityStatsData.totalDevices }}</div>
+                  <div class="stat-label">总设备数</div>
+                </div>
+              </div>
+            </el-col>
+            <el-col :span="8">
+              <div class="stat-card online">
+                <div class="stat-icon">
+                  <el-icon size="20">
+                    <Check />
+                  </el-icon>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ connectivityStatsData.onlineDevices }}</div>
+                  <div class="stat-label">在线设备</div>
+                </div>
+              </div>
+            </el-col>
+            <el-col :span="8">
+              <div class="stat-card offline">
+                <div class="stat-icon">
+                  <el-icon size="20">
+                    <Close />
+                  </el-icon>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ connectivityStatsData.offlineDevices }}</div>
+                  <div class="stat-label">离线设备</div>
+                </div>
+              </div>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 检测信息 -->
+        <div class="check-info">
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <div class="info-item">
+                <el-icon color="#909399">
+                  <Timer />
+                </el-icon>
+                <div class="info-content">
+                  <div class="info-label">检测耗时</div>
+                  <div class="info-value">{{ connectivityStatsData.checkDuration }}ms</div>
+                </div>
+              </div>
+            </el-col>
+            <el-col :span="12">
+              <div class="info-item">
+                <el-icon color="#909399">
+                  <Clock />
+                </el-icon>
+                <div class="info-content">
+                  <div class="info-label">检测时间</div>
+                  <div class="info-value">{{ connectivityStatsData.checkTime }}</div>
+                </div>
+              </div>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 状态分析 -->
+        <div class="status-analysis">
+          <h4>状态分析</h4>
+          <div class="analysis-content">
+            <div class="analysis-item" v-if="connectivityStatsData.onlineRate >= 95">
+              <el-tag type="success" size="small">
+                <el-icon>
+                  <SuccessFilled />
+                </el-icon>
+                优秀
+              </el-tag>
+              <span>网络连通性良好，{{ connectivityStatsData.onlineRate }}% 设备在线</span>
+            </div>
+            <div class="analysis-item" v-else-if="connectivityStatsData.onlineRate >= 80">
+              <el-tag type="warning" size="small">
+                <el-icon>
+                  <WarningFilled />
+                </el-icon>
+                良好
+              </el-tag>
+              <span>网络连通性较好，但有 {{ connectivityStatsData.offlineDevices }} 台设备离线</span>
+            </div>
+            <div class="analysis-item" v-else>
+              <el-tag type="danger" size="small">
+                <el-icon>
+                  <CircleCloseFilled />
+                </el-icon>
+                需要关注
+              </el-tag>
+              <span>{{ connectivityStatsData.offlineDevices }} 台设备离线，建议检查网络状况</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 离线设备详情 -->
+        <div v-if="connectivityStatsData.offlineDevicesList.length > 0" class="offline-devices-section">
+          <div class="section-header">
+            <h4>
+              <el-icon color="#f56c6c">
+                <Warning />
+              </el-icon>
+              离线设备详情 ({{ connectivityStatsData.offlineDevicesList.length }} 台)
+            </h4>
+          </div>
+
+                     <el-table :data="connectivityStatsData.offlineDevicesList" style="width: 100%" size="small"
+             :header-cell-style="{ background: '#fef0f0', color: '#f56c6c' }" max-height="300">
+             <el-table-column type="index" label="序号" width="60" align="center" />
+             <el-table-column prop="hostname" label="主机名" min-width="120">
+               <template #default="scope">
+                 <div 
+                   class="copyable-cell offline-copyable" 
+                   @click="copyToClipboard(scope.row.hostname, '主机名', $event)"
+                   :title="`点击复制主机名: ${scope.row.hostname}`"
+                 >
+                   <span class="hostname-text">{{ scope.row.hostname }}</span>
+                   <el-icon class="copy-icon" size="10">
+                     <CopyDocument />
+                   </el-icon>
+                 </div>
+               </template>
+             </el-table-column>
+             <el-table-column prop="businessIp" label="业务IP" width="140">
+               <template #default="scope">
+                 <div 
+                   v-if="scope.row.businessIp !== '未设置'"
+                   class="copyable-cell offline-copyable" 
+                   @click="copyToClipboard(scope.row.businessIp, '业务IP', $event)"
+                   :title="`点击复制业务IP: ${scope.row.businessIp}`"
+                 >
+                   <el-tag type="info" size="small">
+                     {{ scope.row.businessIp }}
+                   </el-tag>
+                   <el-icon class="copy-icon" size="10">
+                     <CopyDocument />
+                   </el-icon>
+                 </div>
+                 <span v-else class="no-ip">{{ scope.row.businessIp }}</span>
+               </template>
+             </el-table-column>
+            <el-table-column prop="location" label="机房位置" width="120">
+              <template #default="scope">
+                <span class="location-text">{{ scope.row.location }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="errorMessage" label="故障原因" min-width="150">
+              <template #default="scope">
+                <el-tooltip :content="scope.row.errorMessage" placement="top"
+                  :disabled="scope.row.errorMessage.length < 20">
+                  <span class="error-message">{{ scope.row.errorMessage }}</span>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="offline-summary">
+            <el-alert :title="`共发现 ${connectivityStatsData.offlineDevicesList.length} 台设备离线`" type="error"
+              :description="`建议运维人员优先检查这些设备的网络连接状态和业务服务运行情况`" :closable="false" show-icon />
+          </div>
+        </div>
+      </div>
+    </el-dialog>
+
+
   </div>
 </template>
 
@@ -829,10 +846,10 @@ import { listDevice, getDevice, delDevice, addDevice, updateDevice, testConnecti
 import { getBusinessTypes } from "@/api/redfish/businessRule";
 import { parseTime } from "@/utils/ruoyi";
 import { getToken } from "@/utils/auth";
-import { 
-  checkDeviceConnectivity, 
+import {
+  checkDeviceConnectivity,
   batchCheckConnectivity,
-  getConnectivityStatistics 
+  getConnectivityStatistics
 } from '@/api/redfish/connectivity'
 
 const { proxy } = getCurrentInstance();
@@ -859,6 +876,20 @@ const selectedRack = ref(null)
 const deviceDrawerVisible = ref(false)
 const selectedDevice = ref(null)
 const deviceInfoVisible = ref(false)
+
+// 连通性统计对话框
+const connectivityStatsVisible = ref(false)
+const connectivityStatsData = ref({
+  totalDevices: 0,
+  onlineDevices: 0,
+  offlineDevices: 0,
+  checkDuration: 0,
+  checkTime: '',
+  onlineRate: 0,
+  offlineDevicesList: []  // 离线设备详细列表
+})
+
+
 
 // 数据中心数据
 const dataCenterData = ref({})
@@ -914,7 +945,8 @@ const columns = ref([
   { key: 6, label: `系统负责人`, visible: true },
   { key: 7, label: `健康状态`, visible: true },
   { key: 8, label: `监控状态`, visible: true },
-  { key: 9, label: `最后检查时间`, visible: true }
+  { key: 9, label: `连通状态`, visible: true },
+  { key: 10, label: `最后检查时间`, visible: true }
 ]);
 
 /** 查询设备列表 */
@@ -925,7 +957,7 @@ function getList() {
     if (response && response.rows) {
       deviceList.value = response.rows;
       total.value = response.total || 0;
-      
+
       // 如果当前在机房视图模式，重新加载机房数据
       if (viewMode.value === 'datacenter') {
         loadDataCenterData();
@@ -1019,7 +1051,7 @@ function handleAdd() {
 function handleUpdate(row) {
   reset();
   const deviceId = row.deviceId || ids.value;
-  
+
   // 先获取业务类型列表，再获取设备数据
   getBusinessTypeList().then(() => {
     getDevice(deviceId, true).then(response => {
@@ -1055,7 +1087,7 @@ function submitForm() {
 /** 删除按钮操作 */
 function handleDelete(row) {
   const deviceIds = row.deviceId || ids.value;
-  
+
   // 获取要删除的设备信息用于确认对话框
   let confirmMessage = '';
   if (row.deviceId) {
@@ -1067,13 +1099,13 @@ function handleDelete(row) {
     const businessIps = selectedDevices.map(device => device.businessIp || '未设置').join('、');
     confirmMessage = `是否确认删除业务IP为"${businessIps}"的设备？`;
   }
-  
-  proxy.$modal.confirm(confirmMessage).then(function() {
+
+  proxy.$modal.confirm(confirmMessage).then(function () {
     return delDevice(deviceIds);
   }).then(() => {
     getList();
     proxy.$modal.msgSuccess("删除成功");
-  }).catch(() => {});
+  }).catch(() => { });
 }
 
 /** 导出按钮操作 */
@@ -1086,7 +1118,7 @@ function handleExport() {
 /** 测试连接按钮操作 */
 function handleTestConnection(row) {
   const deviceId = row.deviceId || ids.value[0];
-  
+
   proxy.$modal.loading("正在测试连接...");
   testConnectionById(deviceId).then(response => {
     proxy.$modal.closeLoading();
@@ -1118,13 +1150,13 @@ function handleMonitorChange(row) {
     console.warn('主机名为空，忽略监控状态切换事件');
     return;
   }
-  
+
   let text = row.monitorEnabled === 1 ? "启用" : "停用";
-  proxy.$modal.confirm('确认要"' + text + '""' + row.hostname + '"的监控吗？').then(function() {
+  proxy.$modal.confirm('确认要"' + text + '""' + row.hostname + '"的监控吗？').then(function () {
     return changeMonitorStatus(row.deviceId, row.monitorEnabled);
   }).then(() => {
     proxy.$modal.msgSuccess(text + "成功");
-  }).catch(function() {
+  }).catch(function () {
     row.monitorEnabled = row.monitorEnabled === 0 ? 1 : 0;
   });
 }
@@ -1133,7 +1165,7 @@ function handleMonitorChange(row) {
 function getHealthStatusType(status) {
   const statusMap = {
     'ok': 'success',
-    'warning': 'warning', 
+    'warning': 'warning',
     'critical': 'warning',  // 简化分类：critical合并到warning
     'unknown': 'info'
   };
@@ -1181,37 +1213,125 @@ function submitFileForm() {
   proxy.$refs["uploadRef"].submit();
 }
 
+// 更新设备列表中的连通性状态
+function updateDeviceListConnectivity(result) {
+  if (!result.details) return
+
+  // 创建设备ID到连通性结果的映射
+  const connectivityMap = {}
+  result.details.forEach(detail => {
+    // 尝试多种可能的设备ID字段名
+    const deviceId = detail.device_id || detail.deviceId || detail.id
+    if (deviceId) {
+      connectivityMap[deviceId] = detail
+    }
+  })
+
+  // 更新设备列表中的连通性结果
+  deviceList.value.forEach((device, index) => {
+    if (connectivityMap[device.deviceId]) {
+      // 使用Vue的响应式更新方式，确保触发视图更新
+      const connectivityResult = { ...connectivityMap[device.deviceId] }
+      deviceList.value[index].connectivityResult = connectivityResult
+    }
+  })
+}
+
+// 更新单个设备的连通性状态
+function updateSingleDeviceConnectivity(deviceId, connectivityResult) {
+  const device = deviceList.value.find(d => d.deviceId === deviceId)
+  if (device) {
+    // 使用Vue的响应式更新方式
+    device.connectivityResult = { ...connectivityResult }
+  }
+}
+
+// 获取Ping响应时间的样式类
+function getPingResponseClass(responseTime) {
+  if (!responseTime || responseTime === 'N/A') return 'ping-unknown'
+
+  const time = parseFloat(responseTime.replace('ms', ''))
+  if (time <= 10) return 'ping-excellent'
+  if (time <= 50) return 'ping-good'
+  if (time <= 100) return 'ping-fair'
+  return 'ping-poor'
+}
+
+// 获取进度条颜色
+function getProgressColor(percentage) {
+  if (percentage >= 95) return '#67c23a'      // 绿色 - 优秀
+  if (percentage >= 80) return '#e6a23c'      // 橙色 - 良好
+  if (percentage >= 60) return '#f56c6c'      // 红色 - 需要关注
+  return '#909399'                            // 灰色 - 很差
+}
+
+// 复制到剪贴板功能
+async function copyToClipboard(text, fieldName, event) {
+  if (!text) {
+    proxy.$modal.msgWarning(`${fieldName}为空，无法复制`)
+    return
+  }
+
+  const targetElement = event?.currentTarget
+
+  try {
+    // 使用现代浏览器的 Clipboard API
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      // 回退到传统方法
+      const textArea = document.createElement('textarea')
+      textArea.value = text
+      textArea.style.position = 'fixed'
+      textArea.style.left = '-999999px'
+      textArea.style.top = '-999999px'
+      document.body.appendChild(textArea)
+      textArea.focus()
+      textArea.select()
+      document.execCommand('copy')
+      textArea.remove()
+    }
+    
+    // 添加成功视觉反馈
+    if (targetElement) {
+      targetElement.classList.add('copy-success')
+      setTimeout(() => {
+        targetElement.classList.remove('copy-success')
+      }, 1000)
+    }
+    
+    proxy.$modal.msgSuccess(`${fieldName}已复制: ${text}`)
+  } catch (error) {
+    console.error('复制失败:', error)
+    proxy.$modal.msgError(`复制${fieldName}失败，请手动复制`)
+  }
+}
+
 // 检测单个设备连通性
 function handleCheckConnectivity(row) {
   const loading = proxy.$modal.loading("正在检测设备连通性...")
-  
+
   checkDeviceConnectivity(row.deviceId).then(response => {
     proxy.$modal.closeLoading()
-    
+
+    // 更新列表中的连通性状态
+    updateSingleDeviceConnectivity(row.deviceId, response.data)
+
+    const status = response.data.online ? '在线' : '离线'
+    const pingTime = response.data.ping?.response_time || 'N/A'
+
     if (response.data.online) {
-      proxy.$modal.msgSuccess(`设备 ${row.hostname} (${response.data.business_ip}) 连通性检测成功！
-
-检测详情：
-• Ping响应时间: ${response.data.ping?.response_time || 'N/A'}
-• 检测耗时: ${response.data.check_duration_ms?.toFixed(1)}ms
-• 检测时间: ${new Date(response.data.check_time).toLocaleString()}`)
-    } else {
-      let errorInfo = `设备 ${row.hostname} (${response.data.business_ip}) 连通性检测失败！
+      proxy.$modal.msgSuccess(`设备 ${row.hostname} (${response.data.business_ip}) 
       
-错误信息：
-• Ping错误: ${response.data.ping?.error || 'N/A'}
-• 检测耗时: ${response.data.check_duration_ms?.toFixed(1)}ms`
-
-      // 显示端口检测结果（如果有）
-      if (response.data.port_checks) {
-        errorInfo += '\n\n端口检测结果：'
-        Object.entries(response.data.port_checks).forEach(([portName, result]) => {
-          const status = result.success ? '可达' : '不可达'
-          errorInfo += `\n• ${portName}: ${status}`
-        })
-      }
-
-      proxy.$modal.msgWarning(errorInfo)
+连通性检测结果: ${status}
+Ping响应时间: ${pingTime}
+检测耗时: ${response.data.check_duration_ms?.toFixed(1)}ms`)
+    } else {
+      proxy.$modal.msgWarning(`设备 ${row.hostname} (${response.data.business_ip}) 
+      
+连通性检测结果: ${status}
+错误信息: ${response.data.ping?.error || '无详细错误信息'}
+检测耗时: ${response.data.check_duration_ms?.toFixed(1)}ms`)
     }
   }).catch(error => {
     proxy.$modal.closeLoading()
@@ -1222,50 +1342,38 @@ function handleCheckConnectivity(row) {
 // 批量检测连通性
 function handleBatchCheckConnectivity() {
   // 修复：使用表格ref获取选中的行
-  const selectedRows = deviceListRef.value ? 
-    deviceListRef.value.getSelectionRows() : 
+  const selectedRows = deviceListRef.value ?
+    deviceListRef.value.getSelectionRows() :
     deviceList.value.filter(device => ids.value.includes(device.deviceId))
-  
+
   if (selectedRows.length === 0) {
     proxy.$modal.msgWarning('请先选择要检测的设备')
     return
   }
-  
+
   const deviceIds = selectedRows.map(row => row.deviceId)
   const loading = proxy.$modal.loading(`正在批量检测 ${selectedRows.length} 台设备的连通性...`)
-  
-  batchCheckConnectivity({ 
-    deviceIds, 
-    maxConcurrent: 20 
+
+  batchCheckConnectivity({
+    deviceIds,
+    maxConcurrent: 20
   }).then(response => {
     proxy.$modal.closeLoading()
-    
+
     const result = response.data
     const onlineCount = result.online_devices
     const offlineCount = result.offline_devices
     const totalTime = result.check_duration_ms?.toFixed(1)
-    
-    // 构建详细结果
-    let detailText = `批量连通性检测完成！
-    
-统计结果：
-• 总设备数: ${result.total_devices}
-• 在线设备: ${onlineCount}
-• 离线设备: ${offlineCount}
-• 检测耗时: ${totalTime}ms
 
-设备详情：`
+    // 将连通性检测结果更新到设备列表中
+    updateDeviceListConnectivity(result)
 
-    result.details?.forEach((detail, index) => {
-      const status = detail.online ? '在线' : '离线'
-      const pingTime = detail.check_details?.ping?.response_time || 'N/A'
-      detailText += `\n${index + 1}. ${detail.hostname}: ${status} (Ping: ${pingTime})`
-    })
+    // 显示简要提示信息
+    proxy.$modal.msgSuccess(`批量连通性检测完成！
     
-    proxy.$modal.alert(detailText, '批量检测结果')
-    
-    // 检测完成后刷新列表
-    handleQuery()
+在线设备: ${onlineCount}台  |  离线设备: ${offlineCount}台  |  检测耗时: ${totalTime}ms`)
+
+    // 注意：不需要刷新列表，因为我们已经更新了前端状态
   }).catch(error => {
     proxy.$modal.closeLoading()
     proxy.$modal.msgError(`批量检测失败: ${error.message}`)
@@ -1275,25 +1383,38 @@ function handleBatchCheckConnectivity() {
 // 获取连通性统计
 function handleGetConnectivityStats() {
   const loading = proxy.$modal.loading('正在获取设备连通性统计...')
-  
+
   getConnectivityStatistics({ useCache: false }).then(response => {
     proxy.$modal.closeLoading()
-    
+
     const result = response.data
-    const onlineCount = result.online_devices
-    const offlineCount = result.offline_devices
-    const totalTime = result.check_duration_ms?.toFixed(1)
-    
-    proxy.$modal.alert(
-      `设备连通性统计结果：
-      
-• 总设备数: ${result.total_devices}
-• 在线设备: ${onlineCount}
-• 离线设备: ${offlineCount}
-• 检测耗时: ${totalTime}ms
-• 检测时间: ${new Date(result.check_time).toLocaleString()}`,
-      '连通性统计'
-    )
+    const onlineCount = result.online_devices || 0
+    const offlineCount = result.offline_devices || 0
+    const totalDevices = result.total_devices || 0
+    const onlineRate = totalDevices > 0 ? Math.round((onlineCount / totalDevices) * 100) : 0
+
+    // 提取离线设备详细信息
+    const offlineDevicesList = (result.details || []).filter(device => !device.online).map(device => ({
+      deviceId: device.device_id,
+      hostname: device.hostname,
+      businessIp: device.business_ip || '未设置',
+      location: device.location || '未知',
+      errorMessage: device.check_details?.error || device.check_details?.ping?.error || '连接超时'
+    }))
+
+    // 更新统计数据
+    connectivityStatsData.value = {
+      totalDevices,
+      onlineDevices: onlineCount,
+      offlineDevices: offlineCount,
+      checkDuration: result.check_duration_ms?.toFixed(1) || 0,
+      checkTime: result.check_time ? new Date(result.check_time).toLocaleString() : '未知',
+      onlineRate,
+      offlineDevicesList
+    }
+
+    // 显示统计对话框
+    connectivityStatsVisible.value = true
   }).catch(error => {
     proxy.$modal.closeLoading()
     proxy.$modal.msgError(`获取统计失败: ${error.message}`)
@@ -1305,11 +1426,11 @@ function handleGetConnectivityStats() {
 /** 位置解析工具函数 */
 function parseLocation(location) {
   if (!location) return null
-  
+
   // 解析 "XW_B1B04_21-24" 格式
   const regex = /^([A-Z]{2})_([A-Z]+\d+)([A-Z]+\d+)_(\d+)-(\d+)$/
   const match = location.match(regex)
-  
+
   if (match) {
     return {
       dataCenter: match[1],        // XW
@@ -1355,10 +1476,10 @@ function loadDataCenterData() {
     ...device,
     locationInfo: parseLocation(device.location)
   })).filter(device => device.locationInfo) // 过滤无效位置
-  
+
   // 按数据中心分组统计
   const dcStats = {}
-  
+
   parsedDevices.forEach(device => {
     const dc = device.locationInfo.dataCenter
     if (!dcStats[dc]) {
@@ -1369,10 +1490,10 @@ function loadDataCenterData() {
         healthStats: { ok: 0, warning: 0, unknown: 0 }
       }
     }
-    
+
     dcStats[dc].totalDevices++
     dcStats[dc].roomCount.add(device.locationInfo.room)
-    
+
     // 统计健康状态
     const healthStatus = device.healthStatus || 'unknown'
     if (dcStats[dc].healthStats[healthStatus] !== undefined) {
@@ -1381,12 +1502,12 @@ function loadDataCenterData() {
       dcStats[dc].healthStats.unknown++
     }
   })
-  
+
   // 转换roomCount为数字
   Object.keys(dcStats).forEach(dc => {
     dcStats[dc].roomCount = dcStats[dc].roomCount.size
   })
-  
+
   dataCenterData.value = dcStats
 }
 
@@ -1402,13 +1523,13 @@ function loadRoomData(dcCode) {
   const parsedDevices = deviceList.value.map(device => ({
     ...device,
     locationInfo: parseLocation(device.location)
-  })).filter(device => 
+  })).filter(device =>
     device.locationInfo && device.locationInfo.dataCenter === dcCode
   )
-  
+
   // 按机房分组统计
   const roomStats = {}
-  
+
   parsedDevices.forEach(device => {
     const room = device.locationInfo.room
     if (!roomStats[room]) {
@@ -1419,10 +1540,10 @@ function loadRoomData(dcCode) {
         healthStats: { ok: 0, warning: 0, unknown: 0 }
       }
     }
-    
+
     roomStats[room].deviceCount++
     roomStats[room].rackCount.add(device.locationInfo.rack)
-    
+
     // 统计健康状态
     const healthStatus = device.healthStatus || 'unknown'
     if (roomStats[room].healthStats[healthStatus] !== undefined) {
@@ -1431,7 +1552,7 @@ function loadRoomData(dcCode) {
       roomStats[room].healthStats.unknown++
     }
   })
-  
+
   // 转换为数组并处理rackCount
   roomData.value = Object.values(roomStats).map(room => ({
     ...room,
@@ -1451,15 +1572,15 @@ function loadRackData(dcCode, roomCode) {
   const parsedDevices = deviceList.value.map(device => ({
     ...device,
     locationInfo: parseLocation(device.location)
-  })).filter(device => 
-    device.locationInfo && 
+  })).filter(device =>
+    device.locationInfo &&
     device.locationInfo.dataCenter === dcCode &&
     device.locationInfo.room === roomCode
   )
-  
+
   // 按机柜分组
   const rackStats = {}
-  
+
   parsedDevices.forEach(device => {
     const rack = device.locationInfo.rack
     if (!rackStats[rack]) {
@@ -1469,13 +1590,13 @@ function loadRackData(dcCode, roomCode) {
         occupancyRate: 0
       }
     }
-    
+
     rackStats[rack].devices.push({
       ...device,
       uRange: device.locationInfo.uRange
     })
   })
-  
+
   // 计算占用率（假设每个机柜42U）
   Object.values(rackStats).forEach(rack => {
     const totalUUsed = rack.devices.reduce((sum, device) => {
@@ -1484,7 +1605,7 @@ function loadRackData(dcCode, roomCode) {
     }, 0)
     rack.occupancyRate = Math.round((totalUUsed / 42) * 100)
   })
-  
+
   rackData.value = Object.values(rackStats)
 }
 
@@ -1534,7 +1655,7 @@ function getDataCenterHealthText(healthStats) {
 /** 处理U位点击事件 */
 function handleUnitClick(unit, rack, event) {
   event.stopPropagation() // 阻止事件冒泡
-  
+
   if (unit.device) {
     // 点击占用U位，显示设备详情
     showDeviceInfo(unit.device)
@@ -1572,10 +1693,10 @@ function getRoomHealthText(room) {
 function getRackStatusClass(rack) {
   const hasWarning = rack.devices.some(device => device.healthStatus === 'warning')
   if (hasWarning) return 'rack-warning'
-  
+
   const allHealthy = rack.devices.every(device => device.healthStatus === 'ok')
   if (allHealthy && rack.devices.length > 0) return 'rack-healthy'
-  
+
   return 'rack-unknown'
 }
 
@@ -1600,7 +1721,7 @@ function getDeviceHealthClass(device) {
 function getRackUnits(rack) {
   // 创建42个U位的数组（从42U到1U，顶部到底部）
   const units = []
-  
+
   // 初始化所有U位为空
   for (let i = 42; i >= 1; i--) {
     units.push({
@@ -1611,20 +1732,20 @@ function getRackUnits(rack) {
       deviceHeight: 0
     })
   }
-  
+
   // 将设备分配到对应的U位
   if (rack.devices && rack.devices.length > 0) {
     rack.devices.forEach(device => {
       const startU = device.locationInfo.startU
       const endU = device.locationInfo.endU
       const deviceHeight = endU - startU + 1
-      
+
       // 为设备占用的每个U位分配状态
       for (let u = startU; u <= endU; u++) {
         const unitIndex = 42 - u // 数组索引（42U在索引0，1U在索引41）
         if (unitIndex >= 0 && unitIndex < 42) {
           units[unitIndex].device = device
-          
+
           // 在最低位U位（startU）显示设备信息
           if (u === startU) {
             units[unitIndex].isDeviceStart = true
@@ -1636,7 +1757,7 @@ function getRackUnits(rack) {
       }
     })
   }
-  
+
   return units
 }
 
@@ -1684,30 +1805,20 @@ getList();
   transition: all 0.3s ease;
   height: 280px;
   border-radius: 8px;
-}
-
-.datacenter-card-simple:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
-}
-
-.datacenter-xw {
-  border-top: 4px solid #1890ff;
-}
-
-.datacenter-yj {
   border-top: 4px solid #52c41a;
 }
 
-.datacenter-yz {
-  border-top: 4px solid #faad14;
+.datacenter-card-simple:hover {
+  border-top: 4px solid #1890ff;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
 }
 
 .card-header-simple {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .title-section {
@@ -1756,7 +1867,7 @@ getList();
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 28px;
+  margin-bottom: 40px;
   padding: 20px;
   background: #fafafa;
   border-radius: 6px;
@@ -1797,7 +1908,7 @@ getList();
 .health-item-simple {
   display: flex;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   color: #666;
   flex: 1;
 }
@@ -1968,7 +2079,7 @@ getList();
   flex: 1;
   display: flex;
   flex-direction: column;
-  border: 2px solid #a5a4a4;
+  border: 1.5px solid #c5c4c4;
   /* border-radius: 4px; */
   background: #ffffff;
   position: relative;
@@ -1980,7 +2091,7 @@ getList();
   height: 13px;
   position: relative;
   font-size: 8px;
-  border-bottom: 1.5px solid #c7c6c6;
+  border-bottom: 1.5px dashed #c7c6c6;
 }
 
 .unit-slot:last-child {
@@ -1990,8 +2101,8 @@ getList();
 .unit-number {
   width: 22px;
   text-align: center;
-  font-size: 9px; 
-  color: #999;
+  font-size: 9px;
+  color: #727272;
   font-weight: 400;
   background: #fafafa;
   height: 100%;
@@ -2087,8 +2198,8 @@ getList();
 }
 
 .unit-occupied.device-unknown .unit-device-merged {
-  background-color: #e5e3e3;
-  border-color: #d9d9d9;
+  background-color: #cbcaca;
+  border-color: #c5c4c4;
 }
 
 .device-name-merged {
@@ -2097,16 +2208,16 @@ getList();
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 10px;
+  font-size: 12px;
   text-align: center;
   line-height: 1.2;
 }
 
 .device-range {
-  font-size: 7px;
+  font-size: 9px;
   color: #666;
   text-align: center;
-  margin-top: 1px;
+  margin-top: 3px;
 }
 
 /* 可点击U位样式 */
@@ -2150,48 +2261,476 @@ getList();
     height: auto;
     min-height: 200px;
   }
-  
+
   .stats-section {
     flex-direction: column;
     gap: 12px;
   }
-  
+
   .stat-divider {
     display: none;
   }
-  
+
   .health-detail {
     flex-direction: column;
     gap: 6px;
   }
-  
+
   .card-header {
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .datacenter-icon {
     margin-bottom: 8px;
   }
-  
+
   .datacenter-stats {
     flex-direction: column;
     gap: 8px;
   }
-  
+
   .stat-item {
     text-align: left;
   }
-  
+
   .health-distribution {
     justify-content: flex-start;
   }
-  
+
   .room-card,
   .rack-card {
     height: auto;
     min-height: 100px;
   }
+}
+
+/* 列表中的连通性状态样式 */
+.connectivity-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.connectivity-tag {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.no-test {
+  color: #909399;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.ping-time {
+  font-size: 11px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+/* 连通性检测结果样式 */
+.connectivity-summary {
+  margin-bottom: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.connectivity-summary .el-statistic {
+  text-align: center;
+}
+
+.connectivity-summary .success .el-statistic__content {
+  color: #67c23a;
+}
+
+.connectivity-summary .danger .el-statistic__content {
+  color: #f56c6c;
+}
+
+/* Ping响应时间样式 */
+.ping-excellent {
+  color: #67c23a;
+  font-weight: bold;
+}
+
+.ping-good {
+  color: #95d475;
+  font-weight: bold;
+}
+
+.ping-fair {
+  color: #e6a23c;
+  font-weight: bold;
+}
+
+.ping-poor {
+  color: #f56c6c;
+  font-weight: bold;
+}
+
+.ping-unknown {
+  color: #909399;
+}
+
+/* 状态文本样式 */
+.success-text {
+  color: #67c23a;
+  font-weight: 500;
+}
+
+.error-text {
+  color: #f56c6c;
+  font-size: 12px;
+}
+
+.warning-text {
+  color: #e6a23c;
+  font-style: italic;
+}
+
+/* 连通性统计对话框样式 */
+.connectivity-stats-container {
+  padding: 20px 0;
+}
+
+.stats-overview {
+  margin-bottom: 30px;
+}
+
+.overview-card {
+  text-align: center;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 12px;
+  padding: 30px;
+}
+
+.stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  gap: 12px;
+}
+
+.stats-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.circular-progress {
+  display: flex;
+  justify-content: center;
+}
+
+.progress-text {
+  text-align: center;
+}
+
+.progress-text .percentage {
+  font-size: 24px;
+  font-weight: bold;
+  color: #2c3e50;
+  line-height: 1;
+}
+
+.progress-text .label {
+  font-size: 12px;
+  color: #606266;
+  margin-top: 4px;
+}
+
+.stats-details {
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s;
+}
+
+.stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card.total {
+  border-left: 4px solid #409eff;
+}
+
+.stat-card.online {
+  border-left: 4px solid #67c23a;
+}
+
+.stat-card.offline {
+  border-left: 4px solid #f56c6c;
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 16px;
+}
+
+.stat-card.total .stat-icon {
+  background: rgba(64, 158, 255, 0.1);
+  color: #409eff;
+}
+
+.stat-card.online .stat-icon {
+  background: rgba(103, 194, 58, 0.1);
+  color: #67c23a;
+}
+
+.stat-card.offline .stat-icon {
+  background: rgba(245, 108, 108, 0.1);
+  color: #f56c6c;
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: bold;
+  color: #2c3e50;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #606266;
+}
+
+.check-info {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.info-content {
+  flex: 1;
+}
+
+.info-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.info-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.status-analysis {
+  border-top: 1px solid #ebeef5;
+  padding-top: 20px;
+}
+
+.status-analysis h4 {
+  margin: 0 0 16px 0;
+  color: #2c3e50;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.analysis-content {
+  background: #fafbfc;
+  border-radius: 6px;
+  padding: 16px;
+  border-left: 4px solid #409eff;
+}
+
+.analysis-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.analysis-item span {
+  color: #606266;
+  font-size: 14px;
+}
+
+/* 离线设备详情区域样式 */
+.offline-devices-section {
+  margin-top: 30px;
+  border-top: 1px solid #ebeef5;
+  padding-top: 20px;
+}
+
+.section-header {
+  margin-bottom: 16px;
+}
+
+.section-header h4 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hostname-text {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.location-text {
+  color: #606266;
+  font-size: 13px;
+}
+
+.no-ip {
+  color: #c0c4cc;
+  font-style: italic;
+  font-size: 12px;
+}
+
+.error-message {
+  color: #f56c6c;
+  font-size: 12px;
+  cursor: help;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+  display: inline-block;
+}
+
+.offline-summary {
+  margin-top: 16px;
+}
+
+/* 可复制单元格样式 */
+.copyable-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  max-width: 100%;
+  position: relative;
+}
+
+.copyable-cell:hover {
+  background-color: #f0f9ff;
+  color: #409eff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.copyable-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.copy-icon {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  color: #409eff;
+  flex-shrink: 0;
+}
+
+.copyable-cell:hover .copy-icon {
+  opacity: 1;
+}
+
+/* 复制成功的动画效果 */
+.copyable-cell.copy-success {
+  background-color: #f0f9ff;
+  color: #67c23a;
+}
+
+.copyable-cell.copy-success .copy-icon {
+  color: #67c23a;
+  opacity: 1;
+}
+
+/* 离线设备表格中的可复制单元格样式 */
+.offline-copyable {
+  padding: 2px 6px;
+  margin: -2px;
+}
+
+.offline-copyable:hover {
+  background-color: rgba(64, 158, 255, 0.1);
+  color: #409eff;
+  transform: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.offline-copyable .copy-icon {
+  color: #909399;
+}
+
+.offline-copyable:hover .copy-icon {
+  color: #409eff;
+  opacity: 1;
+}
+
+.offline-copyable.copy-success {
+  background-color: rgba(103, 194, 58, 0.1);
+  color: #67c23a;
+}
+
+.offline-copyable.copy-success .copy-icon {
+  color: #67c23a;
+}
+
+/* 详情对话框中的可复制单元格样式 */
+.detail-copyable {
+  display: inline-flex;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 3px;
+}
+
+.detail-copyable:hover {
+  background-color: #f0f9ff;
+  color: #409eff;
+  transform: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.detail-copyable .copy-icon {
+  color: #c0c4cc;
+}
+
+.detail-copyable:hover .copy-icon {
+  color: #409eff;
+  opacity: 1;
 }
 
 /* 工具类 */
@@ -2202,4 +2741,4 @@ getList();
 .mb-3 {
   margin-bottom: 12px;
 }
-</style> 
+</style>
