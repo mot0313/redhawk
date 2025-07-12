@@ -10,15 +10,15 @@ $panGreen: #30B08F;
 
 // 默认主题变量
 $menuText: #bfcbd9;
-$menuActiveText: #409eff;
-$menuBg: #304156;
-$menuHover: #263445;
+$menuActiveText: #1F9E91;
+$menuBg: #1B2B36;
+$menuHover: #253340;
 
 // 浅色主题theme-light
 $menuLightBg: #ffffff;
 $menuLightHover: #f0f1f5;
 $menuLightText: #303133;
-$menuLightActiveText: #409EFF;
+$menuLightActiveText: #1F9E91;
 
 // 基础变量
 $base-sidebar-width: 200px;
@@ -27,12 +27,12 @@ $sideBarWidth: 200px;
 // 菜单暗色变量
 $base-menu-color: #bfcbd9;
 $base-menu-color-active: #f4f4f5;
-$base-menu-background: #304156;
-$base-sub-menu-background: #1f2d3d;
-$base-sub-menu-hover: #001528;
+$base-menu-background: #1B2B36;
+$base-sub-menu-background: #162129;
+$base-sub-menu-hover: #253340;
 
 // 组件变量
-$--color-primary: #409EFF;
+$--color-primary: #1F9E91;
 $--color-success: #67C23A;
 $--color-warning: #E6A23C;
 $--color-danger: #F56C6C;
@@ -70,7 +70,8 @@ $--color-info: #909399;
   /* 亮色模式变量 */
   --sidebar-bg: #{$menuBg};
   --sidebar-text: #{$menuText};
-  --menu-hover: #{$menuHover};
+  --menu-hover: rgba(31, 158, 145, 0.1);
+  --menu-active-bg: rgba(31, 158, 145, 0.15);
   
   --navbar-bg: #ffffff;
   --navbar-text: #303133;
@@ -91,10 +92,11 @@ html.dark {
   --el-border-color-light: #434343;
 
   /* 侧边栏 */
-  --sidebar-bg: #141414;
+  --sidebar-bg: #1B2B36;
   --sidebar-text: #ffffff;
-  --menu-hover: #2d2d2d;
-  --menu-active-text: #{$menuActiveText};
+  --menu-hover: rgba(31, 158, 145, 0.12);
+  --menu-active-bg: rgba(31, 158, 145, 0.18);
+  --menu-active-text: #1F9E91;
 
   /* 顶部导航栏 */
   --navbar-bg: #141414;

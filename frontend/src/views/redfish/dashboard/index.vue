@@ -1,60 +1,67 @@
 <template>
   <div class="dashboard-container">
-    <!-- 连接状态和控制区域 -->
-    <el-row :gutter="20" class="mb-20">
-      <el-col :span="24">
-        <el-card class="status-card">
-          <div class="status-content">
-            <div class="connection-status">
-              <el-icon :class="wsReady ? 'connected' : 'disconnected'">
-                <CircleCheck v-if="wsReady" />
-                <CircleClose v-else />
-              </el-icon>
-              <span :class="wsReady ? 'connected-text' : 'disconnected-text'">
-                {{ wsReady ? '实时推送已就绪' : wsConnected ? '连接中...' : '实时连接断开' }}
-              </span>
-              
-              <!-- 连接失败时显示重连按钮 -->
-              <el-button 
-                v-if="!wsConnected && !wsConnecting" 
-                link 
-                size="small" 
-                @click="handleManualReconnect"
-                class="reconnect-button"
-              >
-                重新连接
-              </el-button>
-            </div>
-            
-            <!-- 监控进度显示 -->
-            <div v-if="monitoringProgress.isMonitoring" class="monitoring-progress">
-              <el-progress 
-                :percentage="monitoringProgress.progress" 
-                :status="monitoringProgress.progress === 100 ? 'success' : undefined"
-                :stroke-width="8"
-              />
-              <div class="progress-info">
-                正在监控: {{ monitoringProgress.currentDevice }} 
-                ({{ monitoringProgress.completed }}/{{ monitoringProgress.total }})
-              </div>
-            </div>
-            
-            <!-- 手动触发按钮 -->
-            <div class="manual-controls">
-              <el-button 
-                type="primary" 
-                :disabled="!wsReady || isButtonLoading || monitoringProgress.isMonitoring"
-                :loading="isButtonLoading"
-                @click="triggerManualMonitoring"
-              >
-                <el-icon v-if="!isButtonLoading"><Refresh /></el-icon>
-                {{ isButtonLoading ? '触发中...' : '手动监控' }}
-              </el-button>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <!-- 悬浮控制面板 -->
+    <div 
+      class="floating-control-panel"
+      :style="{ left: floatingPosition.x + 'px', top: floatingPosition.y + 'px' }"
+      @mousedown="startDrag"
+      ref="floatingPanel"
+    >
+      <!-- 主悬浮图标 -->
+      <div class="floating-icon">
+        <el-icon :class="wsReady ? 'status-ready' : 'status-disconnected'">
+          <CircleCheck v-if="wsReady" />
+          <CircleClose v-else />
+        </el-icon>
+      </div>
+    </div>
+
+    <!-- 左侧弹出的手动监控按钮 -->
+    <div 
+      v-show="showManualMonitorButton"
+      class="manual-monitor-popup"
+      :style="{ 
+        left: (floatingPosition.x - 160) + 'px', 
+        top: (floatingPosition.y + 5) + 'px' 
+      }"
+    >
+      <!-- 监控进度显示 -->
+      <div v-if="monitoringProgress.isMonitoring" class="monitoring-progress-popup">
+        <el-progress 
+          :percentage="monitoringProgress.progress" 
+          :status="monitoringProgress.progress === 100 ? 'success' : undefined"
+          :stroke-width="4"
+        />
+        <div class="progress-info-popup">
+          {{ monitoringProgress.currentDevice }} 
+          ({{ monitoringProgress.completed }}/{{ monitoringProgress.total }})
+        </div>
+      </div>
+      
+      <!-- 手动监控按钮 -->
+      <el-button 
+        type="primary" 
+        size="default"
+        :disabled="!wsReady || isButtonLoading || monitoringProgress.isMonitoring"
+        :loading="isButtonLoading"
+        @click="triggerManualMonitoring"
+        class="manual-monitor-btn"
+      >
+        <el-icon v-if="!isButtonLoading"><Refresh /></el-icon>
+        {{ isButtonLoading ? '触发中...' : '手动监控' }}
+      </el-button>
+      
+      <!-- 连接失败时显示重连按钮 -->
+      <el-button 
+        v-if="!wsConnected && !wsConnecting" 
+        link 
+        size="small" 
+        @click="handleManualReconnect"
+        class="reconnect-button-popup"
+      >
+        重新连接
+      </el-button>
+    </div>
     
     <!-- 统计卡片区域 -->
     <el-row :gutter="20" class="mb-20">
@@ -233,7 +240,7 @@
 
 <script setup name="RedfishDashboard">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import { Monitor, Warning, Bell, CircleClose, CircleCheck, Refresh } from '@element-plus/icons-vue'
+import { Monitor, Warning, Bell, CircleClose, CircleCheck, Refresh, Close } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { getDashboardOverview, getAlertTrend, getDeviceHealth, getRealtimeAlerts, getScheduledAlerts } from '@/api/redfish/dashboard'
 import { triggerMonitor } from '@/api/redfish/monitor'
@@ -289,6 +296,13 @@ const trendChartRef = ref(null)
 const healthChartRef = ref(null)
 let trendChart = null
 let healthChart = null
+
+// 悬浮面板相关
+const floatingPanel = ref(null)
+const showManualMonitorButton = ref(false)
+const floatingPosition = ref({ x: window.innerWidth - 70, y: 20 })
+const isDragging = ref(false)
+const dragOffset = ref({ x: 0, y: 0 })
 
 // ===============================================================
 // 数据加载函数
@@ -371,7 +385,7 @@ const loadTrendChart = async () => {
             name: '总告警',
             type: 'line',
             data: data.totalCounts,
-            itemStyle: { color: '#409eff' },
+                                itemStyle: { color: '#1F9E91' },
             smooth: true
           }
         ]
@@ -610,6 +624,136 @@ const handleManualReconnect = () => {
   // 调用WebSocket手动重连
   websocketService.manualReconnect()
 };
+
+// ===============================================================
+// 悬浮面板控制函数
+// ===============================================================
+
+// 切换手动监控按钮显示/隐藏状态
+const toggleManualMonitorButton = () => {
+  showManualMonitorButton.value = !showManualMonitorButton.value
+}
+
+// 点击页面其他区域隐藏手动监控按钮
+const handleClickOutside = (e) => {
+  if (showManualMonitorButton.value && 
+      !e.target.closest('.floating-control-panel') && 
+      !e.target.closest('.manual-monitor-popup')) {
+    showManualMonitorButton.value = false
+  }
+}
+
+// 拖拽相关状态
+const dragStartPosition = ref({ x: 0, y: 0 })
+const hasDragged = ref(false)
+const dragThreshold = 3 // 拖拽阈值，减小阈值提高响应速度
+
+// 开始可能的拖拽操作
+const startDrag = (e) => {
+  if (e.target.closest('.floating-icon') && e.type === 'mousedown') {
+    // 记录起始位置
+    dragStartPosition.value = { x: e.clientX, y: e.clientY }
+    hasDragged.value = false
+    
+    const rect = floatingPanel.value.getBoundingClientRect()
+    dragOffset.value = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    }
+    
+    // 添加临时事件监听器
+    document.addEventListener('mousemove', checkDragStart)
+    document.addEventListener('mouseup', handleMouseUp)
+    
+    // 防止文本选择和默认行为
+    e.preventDefault()
+  }
+}
+
+// 检查是否开始拖拽
+const checkDragStart = (e) => {
+  if (!hasDragged.value) {
+    const deltaX = Math.abs(e.clientX - dragStartPosition.value.x)
+    const deltaY = Math.abs(e.clientY - dragStartPosition.value.y)
+    
+    // 如果移动距离超过阈值，开始拖拽
+    if (deltaX > dragThreshold || deltaY > dragThreshold) {
+      hasDragged.value = true
+      isDragging.value = true
+      
+      // 添加拖拽样式并禁用过渡动画以提高性能
+      floatingPanel.value?.classList.add('dragging')
+      floatingPanel.value?.classList.add('no-transition')
+      
+      // 隐藏弹出按钮（如果正在显示）
+      showManualMonitorButton.value = false
+      
+      // 移除检查监听器，添加拖拽监听器
+      document.removeEventListener('mousemove', checkDragStart)
+      document.addEventListener('mousemove', onDrag)
+    }
+  }
+}
+
+// 处理鼠标释放
+const handleMouseUp = (e) => {
+  // 清理临时监听器
+  document.removeEventListener('mousemove', checkDragStart)
+  document.removeEventListener('mousemove', onDrag)
+  document.removeEventListener('mouseup', handleMouseUp)
+  
+  // 如果没有发生拖拽，则处理点击事件
+  if (!hasDragged.value) {
+    // 这是一个点击事件，切换弹出按钮
+    toggleManualMonitorButton()
+  }
+  
+  // 清理拖拽状态
+  if (isDragging.value) {
+    isDragging.value = false
+    floatingPanel.value?.classList.remove('dragging')
+    
+    // 恢复过渡动画
+    setTimeout(() => {
+      floatingPanel.value?.classList.remove('no-transition')
+    }, 50) // 短暂延迟确保位置更新完成
+  }
+  
+  hasDragged.value = false
+}
+
+// 拖拽过程中
+const onDrag = (e) => {
+  if (!isDragging.value) return
+  
+  // 使用requestAnimationFrame优化性能
+  requestAnimationFrame(() => {
+    const newX = e.clientX - dragOffset.value.x
+    const newY = e.clientY - dragOffset.value.y
+    
+    // 限制在视窗范围内，考虑手动监控按钮可能弹出的空间
+    const maxX = window.innerWidth - 60
+    const maxY = window.innerHeight - 60
+    
+    floatingPosition.value = {
+      x: Math.max(160, Math.min(newX, maxX)), // 左边留160px空间给弹出按钮
+      y: Math.max(0, Math.min(newY, maxY))
+    }
+  })
+}
+
+
+
+// 处理窗口大小变化
+const handleWindowResize = () => {
+  const maxX = window.innerWidth - 60
+  const maxY = window.innerHeight - 60
+  
+  floatingPosition.value = {
+    x: Math.max(160, Math.min(floatingPosition.value.x, maxX)),
+    y: Math.max(0, Math.min(floatingPosition.value.y, maxY))
+  }
+}
 
 const handleAlert = (alertData) => {
   const action = alertData.action || 'created'
@@ -1046,6 +1190,19 @@ onMounted(() => {
   
   // 检查WebSocket状态并初始化连接
   initializeWebSocketConnection()
+  
+  // 监听窗口大小变化
+  window.addEventListener('resize', handleWindowResize)
+  
+  // 监听页面点击事件
+  document.addEventListener('click', handleClickOutside)
+  
+  // 设置初始位置
+  nextTick(() => {
+    const initialX = Math.max(160, window.innerWidth - 70) // 确保初始位置不会让弹出按钮超出屏幕
+    const initialY = 80  // 向下移动，从原来的20px改为80px
+    floatingPosition.value = { x: initialX, y: initialY }
+  })
 });
 
 // 初始化WebSocket连接
@@ -1118,6 +1275,17 @@ const initializeWebSocketConnection = () => {
     // 清理WebSocket事件监听器
     cleanupWebSocketListeners()
     
+    // 清理拖拽事件监听器
+    document.removeEventListener('mousemove', onDrag)
+    document.removeEventListener('mousemove', checkDragStart)
+    document.removeEventListener('mouseup', handleMouseUp)
+    
+    // 清理窗口大小变化监听器
+    window.removeEventListener('resize', handleWindowResize)
+    
+    // 清理页面点击事件监听器
+    document.removeEventListener('click', handleClickOutside)
+    
     console.log('[Dashboard] 组件卸载完成')
 });
 </script>
@@ -1131,80 +1299,147 @@ const initializeWebSocketConnection = () => {
   margin-bottom: 20px;
 }
 
-/* 状态卡片样式 */
-.status-card {
+/* 悬浮控制面板样式 */
+.floating-control-panel {
+  position: fixed;
+  z-index: 1000;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  cursor: move;
+  user-select: none;
+  width: 50px;
+  height: 50px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.floating-control-panel:hover {
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.2);
+}
+
+/* 悬浮图标样式 */
+.floating-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.floating-icon:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
+}
+
+.floating-icon .el-icon {
+  font-size: 24px;
+}
+
+.floating-icon .el-icon.status-ready {
+  color: #67c23a;
+}
+
+.floating-icon .el-icon.status-disconnected {
+  color: #f56c6c;
+}
+
+/* 手动监控弹出按钮样式 */
+.manual-monitor-popup {
+  position: fixed;
+  z-index: 999;
+  background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-}
-
-.status-content {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  min-width: 140px;
+  transition: all 0.3s ease;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 20px;
-}
-
-/* 连接状态样式 */
-.connection-status {
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
 }
 
-.reconnect-button {
-  margin-left: 10px;
-  color: #409eff;
-  font-size: 12px;
-  padding: 4px 8px;
+.manual-monitor-popup:hover {
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
 }
 
-.reconnect-button:hover {
+/* 弹出按钮中的监控进度样式 */
+.monitoring-progress-popup {
+  margin-bottom: 8px;
+}
+
+.progress-info-popup {
+  text-align: center;
+  margin-top: 4px;
+  font-size: 10px;
+  color: #606266;
+  line-height: 1.2;
+}
+
+/* 手动监控按钮样式 */
+.manual-monitor-btn {
+  width: 100%;
+  height: 36px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* 弹出面板中的重连按钮样式 */
+.reconnect-button-popup {
+  color: #1F9E91;
+  font-size: 11px;
+  padding: 4px 8px;
+  text-align: center;
+  width: 100%;
+}
+
+.reconnect-button-popup:hover {
   color: #66b1ff;
   background-color: #ecf5ff;
 }
 
-.connection-status .el-icon {
-  font-size: 20px;
+/* 拖拽时的样式 */
+.floating-control-panel.dragging {
+  cursor: grabbing;
+  opacity: 0.9;
 }
 
-.connection-status .el-icon.connected {
-  color: #67c23a;
+/* 禁用过渡动画以提高拖拽性能 */
+.floating-control-panel.no-transition {
+  transition: none !important;
 }
 
-.connection-status .el-icon.disconnected {
-  color: #f56c6c;
-}
-
-.connected-text {
-  color: #67c23a;
-  font-weight: 600;
-}
-
-.disconnected-text {
-  color: #f56c6c;
-  font-weight: 600;
-}
-
-/* 监控进度样式 */
-.monitoring-progress {
-  flex: 1;
-  max-width: 400px;
-  margin: 0 20px;
-}
-
-.progress-info {
-  text-align: center;
-  margin-top: 8px;
-  font-size: 12px;
-  color: #606266;
-}
-
-/* 手动控制样式 */
-.manual-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* 响应式适配 */
+@media (max-width: 768px) {
+  .floating-control-panel.expanded {
+    width: 260px;
+    min-height: 140px;
+    padding: 12px;
+  }
+  
+  .floating-control-panel:not(.expanded) {
+    width: 45px;
+    height: 45px;
+  }
+  
+  .floating-icon .el-icon {
+    font-size: 20px;
+  }
+  
+  .floating-content .connection-status,
+  .floating-content .progress-info {
+    font-size: 11px;
+  }
+  
+  .floating-title {
+    font-size: 13px;
+  }
 }
 
 .stat-card {

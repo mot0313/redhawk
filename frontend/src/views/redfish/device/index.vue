@@ -638,7 +638,7 @@
           <div class="overview-card">
             <div class="card-content">
               <div class="stats-header">
-                <el-icon size="24" color="#409eff">
+                <el-icon size="24" color="#1F9E91">
                   <Monitor />
                 </el-icon>
                 <h3>连通性概览</h3>
@@ -1770,7 +1770,7 @@ getList();
 /* 面包屑导航 */
 .breadcrumb-link {
   cursor: pointer;
-  color: #409eff;
+  color: #1F9E91;
 }
 
 .breadcrumb-link:hover {
@@ -1827,7 +1827,7 @@ getList();
 }
 
 .datacenter-icon-simple {
-  color: #409eff;
+  color: #1F9E91;
   margin-right: 12px;
 }
 
@@ -2465,7 +2465,7 @@ getList();
 }
 
 .stat-card.total {
-  border-left: 4px solid #409eff;
+  border-left: 4px solid #1F9E91;
 }
 
 .stat-card.online {
@@ -2487,8 +2487,8 @@ getList();
 }
 
 .stat-card.total .stat-icon {
-  background: rgba(64, 158, 255, 0.1);
-  color: #409eff;
+  background: rgba(31, 158, 145, 0.1);
+  color: #1F9E91;
 }
 
 .stat-card.online .stat-icon {
@@ -2563,7 +2563,7 @@ getList();
   background: #fafbfc;
   border-radius: 6px;
   padding: 16px;
-  border-left: 4px solid #409eff;
+  border-left: 4px solid #1F9E91;
 }
 
 .analysis-item {
@@ -2644,7 +2644,7 @@ getList();
 
 .copyable-cell:hover {
   background-color: #f0f9ff;
-  color: #409eff;
+  color: #1F9E91;
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -2659,7 +2659,7 @@ getList();
 .copy-icon {
   opacity: 0;
   transition: opacity 0.2s ease;
-  color: #409eff;
+  color: #1F9E91;
   flex-shrink: 0;
 }
 
@@ -2685,8 +2685,8 @@ getList();
 }
 
 .offline-copyable:hover {
-  background-color: rgba(64, 158, 255, 0.1);
-  color: #409eff;
+  background-color: rgba(31, 158, 145, 0.1);
+  color: #1F9E91;
   transform: none;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
@@ -2696,7 +2696,7 @@ getList();
 }
 
 .offline-copyable:hover .copy-icon {
-  color: #409eff;
+  color: #1F9E91;
   opacity: 1;
 }
 
@@ -2719,7 +2719,7 @@ getList();
 
 .detail-copyable:hover {
   background-color: #f0f9ff;
-  color: #409eff;
+  color: #1F9E91;
   transform: none;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
@@ -2729,7 +2729,7 @@ getList();
 }
 
 .detail-copyable:hover .copy-icon {
-  color: #409eff;
+  color: #1F9E91;
   opacity: 1;
 }
 

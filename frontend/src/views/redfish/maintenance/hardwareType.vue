@@ -53,11 +53,12 @@
           <el-option v-for="item in categoryOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
-      <el-form-item label="状态" prop="isActive">
-        <el-select v-model="queryParams.isActive" placeholder="硬件类型状态" clearable style="width: 240px">
-          <el-option v-for="dict in sys_normal_disable" :key="dict.value" :label="dict.label" :value="dict.value" />
-        </el-select>
-      </el-form-item>
+              <el-form-item label="状态" prop="isActive">
+          <el-select v-model="queryParams.isActive" placeholder="硬件类型状态" clearable style="width: 240px">
+            <el-option label="启用" :value="1" />
+            <el-option label="禁用" :value="0" />
+          </el-select>
+        </el-form-item>
       <el-form-item>
         <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
         <el-button icon="Refresh" @click="resetQuery">重置</el-button>
@@ -75,9 +76,14 @@
       <el-table-column label="硬件分类" align="center" prop="category" />
       <el-table-column label="类型描述" align="center" prop="typeDescription" show-overflow-tooltip />
       <el-table-column label="排序" align="center" prop="sortOrder" />
-      <el-table-column label="状态" align="center" prop="isActive">
+      <el-table-column label="是否启用" align="center" prop="isActive">
         <template #default="scope">
-          <dict-tag :options="sys_normal_disable" :value="scope.row.isActive" />
+          <el-switch
+            v-model="scope.row.isActive"
+            :active-value="1"
+            :inactive-value="0"
+            @change="handleStatusChange(scope.row)"
+          />
         </template>
       </el-table-column>
       <el-table-column label="创建时间" align="center" prop="createTime" width="180">
@@ -122,11 +128,13 @@
         <el-form-item label="排序" prop="sortOrder">
           <el-input-number v-model="form.sortOrder" controls-position="right" :min="0" />
         </el-form-item>
-                  <el-form-item label="状态" prop="isActive">
-            <el-radio-group v-model="form.isActive">
-              <el-radio v-for="dict in sys_normal_disable" :key="dict.value" :value="parseInt(dict.value)">{{ dict.label }}</el-radio>
-            </el-radio-group>
-          </el-form-item>
+        <el-form-item label="是否启用" prop="isActive">
+          <el-switch
+            v-model="form.isActive"
+            :active-value="1"
+            :inactive-value="0"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -179,7 +187,6 @@
 import { listHardwareType, getHardwareType, delHardwareType, addHardwareType, updateHardwareType, getHardwareCategories } from "@/api/redfish/businessRule";
 
 const { proxy } = getCurrentInstance();
-const { sys_normal_disable } = proxy.useDict("sys_normal_disable");
 
 const hardwareTypeList = ref([]);
 const categoryOptions = ref([]);
@@ -363,6 +370,35 @@ function handleExport() {
   proxy.download("redfish/hardwareType/export", {
     ...queryParams.value
   }, `hardwareType_${new Date().getTime()}.xlsx`);
+}
+
+/** 状态切换操作 */
+function handleStatusChange(row) {
+  const statusText = row.isActive === 1 ? '启用' : '禁用';
+  const confirmText = `确认要${statusText}该硬件类型吗？`;
+  
+  proxy.$modal.confirm(confirmText).then(() => {
+    const updateData = {
+      typeId: row.typeId,
+      typeCode: row.typeCode,
+      typeName: row.typeName,
+      typeDescription: row.typeDescription,
+      category: row.category,
+      sortOrder: row.sortOrder,
+      isActive: row.isActive
+    };
+    
+    updateHardwareType(updateData).then(response => {
+      proxy.$modal.msgSuccess(`${statusText}成功`);
+      getList();
+    }).catch(() => {
+      // 如果更新失败，恢复原状态
+      row.isActive = row.isActive === 1 ? 0 : 1;
+    });
+  }).catch(() => {
+    // 如果取消操作，恢复原状态
+    row.isActive = row.isActive === 1 ? 0 : 1;
+  });
 }
 
 onMounted(() => {

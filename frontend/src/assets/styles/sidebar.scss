@@ -82,7 +82,7 @@
     .sub-menu-title-noDropdown,
     .el-sub-menu__title {
       &:hover {
-        background-color: rgba(0, 0, 0, 0.06) !important;
+        background-color: var(--menu-hover, rgba(31, 158, 145, 0.1)) !important;
       }
     }
 
@@ -90,21 +90,44 @@
       color: $base-menu-color-active !important;
     }
 
+    // 一级菜单标题选中状态 - 4px边框
+    & .el-sub-menu.is-active > .el-sub-menu__title {
+      background-color: var(--menu-active-bg, rgba(31, 158, 145, 0.15)) !important;
+      border-right: 4px solid #1F9E91;
+    }
+
+    & .theme-dark .el-sub-menu.is-active > .el-sub-menu__title {
+      background-color: var(--menu-active-bg, rgba(31, 158, 145, 0.18)) !important;
+      border-right: 4px solid #1F9E91;
+    }
+
+    // 嵌套子菜单 - 3px边框
     & .nest-menu .el-sub-menu>.el-sub-menu__title,
     & .el-sub-menu .el-menu-item {
       min-width: $base-sidebar-width !important;
 
       &:hover {
-        background-color: rgba(0, 0, 0, 0.06) !important;
+        background-color: var(--menu-hover, rgba(31, 158, 145, 0.1)) !important;
+      }
+
+      &.is-active {
+        background-color: var(--menu-active-bg, rgba(31, 158, 145, 0.15)) !important;
+        border-right: 3px solid #1F9E91;
       }
     }
 
+    // 暗黑模式下的嵌套子菜单 - 3px边框
     & .theme-dark .nest-menu .el-sub-menu>.el-sub-menu__title,
     & .theme-dark .el-sub-menu .el-menu-item {
       background-color: $base-sub-menu-background;
 
       &:hover {
-        background-color: $base-sub-menu-hover !important;
+        background-color: var(--menu-hover, rgba(31, 158, 145, 0.12)) !important;
+      }
+
+      &.is-active {
+        background-color: var(--menu-active-bg, rgba(31, 158, 145, 0.18)) !important;
+        border-right: 3px solid #1F9E91;
       }
     }
   }
@@ -207,11 +230,27 @@
     }
   }
 
-  .nest-menu .el-sub-menu>.el-sub-menu__title,
+  // 折叠状态下的主菜单项 - 4px边框
   .el-menu-item {
     &:hover {
-      // you can use $sub-menuHover
-      background-color: rgba(0, 0, 0, 0.06) !important;
+      background-color: var(--menu-hover, rgba(31, 158, 145, 0.1)) !important;
+    }
+
+    &.is-active {
+      background-color: var(--menu-active-bg, rgba(31, 158, 145, 0.15)) !important;
+      border-right: 4px solid #1F9E91;
+    }
+  }
+
+  // 折叠状态下的嵌套子菜单标题 - 3px边框
+  .nest-menu .el-sub-menu>.el-sub-menu__title {
+    &:hover {
+      background-color: var(--menu-hover, rgba(31, 158, 145, 0.1)) !important;
+    }
+
+    &.is-active {
+      background-color: var(--menu-active-bg, rgba(31, 158, 145, 0.15)) !important;
+      border-right: 3px solid #1F9E91;
     }
   }
 

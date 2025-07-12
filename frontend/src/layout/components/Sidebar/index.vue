@@ -83,21 +83,31 @@ const activeMenu = computed(() => {
     
     .el-menu-item, .el-sub-menu__title {
       &:hover {
-        background-color: var(--menu-hover, rgba(0, 0, 0, 0.06)) !important;
+        background-color: var(--menu-hover, rgba(31, 158, 145, 0.1)) !important;
       }
     }
 
     .el-menu-item {
       color: v-bind(getMenuTextColor);
       
+      &:hover {
+        background-color: var(--menu-hover, rgba(31, 158, 145, 0.1)) !important;
+      }
+      
+      // 主菜单项选中状态 - 4px边框（比子菜单多1px）
       &.is-active {
-        color: var(--menu-active-text, #409eff);
-        background-color: var(--menu-hover, rgba(0, 0, 0, 0.06)) !important;
+        color: var(--menu-active-text, #1F9E91);
+        background-color: var(--menu-active-bg, rgba(31, 158, 145, 0.15)) !important;
+        border-right: 4px solid #1F9E91;
       }
     }
 
     .el-sub-menu__title {
       color: v-bind(getMenuTextColor);
+      
+      &:hover {
+        background-color: var(--menu-hover, rgba(31, 158, 145, 0.1)) !important;
+      }
     }
   }
 }

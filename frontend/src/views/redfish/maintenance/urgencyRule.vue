@@ -48,7 +48,8 @@
       </el-form-item>
       <el-form-item label="状态" prop="isActive">
         <el-select v-model="queryParams.isActive" placeholder="规则状态" clearable style="width: 240px">
-          <el-option v-for="dict in sys_normal_disable" :key="dict.value" :label="dict.label" :value="dict.value" />
+          <el-option label="启用" :value="1" />
+          <el-option label="禁用" :value="0" />
         </el-select>
       </el-form-item>
       <el-form-item>
@@ -81,9 +82,14 @@
         </template>
       </el-table-column>
       <el-table-column label="规则描述" align="center" prop="description" show-overflow-tooltip />
-      <el-table-column label="状态" align="center" prop="isActive">
+      <el-table-column label="是否启用" align="center" prop="isActive">
         <template #default="scope">
-          <dict-tag :options="sys_normal_disable" :value="scope.row.isActive" />
+          <el-switch
+            v-model="scope.row.isActive"
+            :active-value="1"
+            :inactive-value="0"
+            @change="handleStatusChange(scope.row)"
+          />
         </template>
       </el-table-column>
       <el-table-column label="创建时间" align="center" prop="createTime" width="180">
@@ -130,11 +136,13 @@
         <el-form-item label="规则描述" prop="description">
           <el-input v-model="form.description" type="textarea" placeholder="请输入规则描述" />
         </el-form-item>
-                  <el-form-item label="状态" prop="isActive">
-            <el-radio-group v-model="form.isActive">
-              <el-radio v-for="dict in sys_normal_disable" :key="dict.value" :value="parseInt(dict.value)">{{ dict.label }}</el-radio>
-            </el-radio-group>
-          </el-form-item>
+        <el-form-item label="是否启用" prop="isActive">
+          <el-switch
+            v-model="form.isActive"
+            :active-value="1"
+            :inactive-value="0"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -189,7 +197,6 @@ import {
 } from "@/api/redfish/businessRule";
 
 const { proxy } = getCurrentInstance();
-const { sys_normal_disable } = proxy.useDict("sys_normal_disable");
 
 const urgencyRuleList = ref([]);
 const businessTypeOptions = ref([]);
@@ -380,6 +387,34 @@ function handleExport() {
   proxy.download("redfish/urgencyRule/export", {
     ...queryParams.value
   }, `urgencyRule_${new Date().getTime()}.xlsx`);
+}
+
+/** 状态切换操作 */
+function handleStatusChange(row) {
+  const statusText = row.isActive === 1 ? '启用' : '禁用';
+  const confirmText = `确认要${statusText}该紧急度规则吗？`;
+  
+  proxy.$modal.confirm(confirmText).then(() => {
+    const updateData = {
+      ruleId: row.ruleId,
+      businessType: row.businessType,
+      hardwareType: row.hardwareType,
+      urgencyLevel: row.urgencyLevel,
+      description: row.description,
+      isActive: row.isActive
+    };
+    
+    updateUrgencyRule(updateData).then(response => {
+      proxy.$modal.msgSuccess(`${statusText}成功`);
+      getList();
+    }).catch(() => {
+      // 如果更新失败，恢复原状态
+      row.isActive = row.isActive === 1 ? 0 : 1;
+    });
+  }).catch(() => {
+    // 如果取消操作，恢复原状态
+    row.isActive = row.isActive === 1 ? 0 : 1;
+  });
 }
 
 onMounted(() => {

@@ -28,7 +28,7 @@ from module_redfish.controller.alert_controller import alertController
 from module_redfish.controller.business_rule_controller import businessRuleController
 from module_redfish.controller.dashboard_controller import dashboardController
 from module_redfish.controller.duty_controller import duty_controller
-from module_redfish.controller.maintenance_controller import maintenanceController
+
 from module_redfish.controller.connectivity_controller import connectivityController
 from module_redfish.controller.websocket_controller import WebSocketController
 from module_redfish.controller.monitor_config_controller import app3_monitor_config
@@ -105,7 +105,7 @@ controller_list = [
     {'router': businessRuleController, 'tags': ['Redfish-规则管理']},
     {'router': dashboardController, 'tags': ['Redfish-首页数据']},
     {'router': duty_controller, 'tags': ['Redfish-值班管理']},
-    {'router': maintenanceController, 'tags': ['Redfish-硬件更换排期']},
+
     {'router': connectivityController, 'tags': ['Redfish-连通性检测']},
     {'router': app3_monitor_config, 'tags': ['Redfish-监控配置']},
 ]

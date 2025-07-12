@@ -296,7 +296,7 @@ class WebSocketService {
         is_ready: true,
         connectionState: { ...this.connectionState }
       })
-      ElMessage.success('实时推送已就绪，可以进行操作')
+      // ElMessage.success('实时推送已就绪，可以进行操作') // 已取消此提示
     } else {
       console.log('[WebSocket] ⏳ WebSocket未完全就绪', this.connectionState)
     }
