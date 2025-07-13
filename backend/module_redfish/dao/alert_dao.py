@@ -6,7 +6,7 @@ from sqlalchemy import and_, or_, func, desc, asc, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime, timedelta
-from module_redfish.models import AlertInfo, DeviceInfo
+from module_redfish.entity.do import AlertInfoDO, DeviceInfoDO
 from module_redfish.entity.vo.alert_vo import AlertPageQueryModel
 from utils.page_util import PageUtil
 from utils.log_util import logger
@@ -35,73 +35,73 @@ class AlertDao:
         """
         # 关联设备表查询，只选择必要字段提升性能
         query = select(
-            AlertInfo.alert_id,
-            AlertInfo.device_id,
-            AlertInfo.component_type,
-            AlertInfo.component_name,
-            AlertInfo.health_status,
-            AlertInfo.urgency_level,
-            AlertInfo.alert_status,
-            AlertInfo.first_occurrence,
-            AlertInfo.last_occurrence,
-            AlertInfo.resolved_time,
-            AlertInfo.scheduled_maintenance_time,
-            AlertInfo.maintenance_description,
-            AlertInfo.maintenance_status,
-            AlertInfo.maintenance_notes,
-            AlertInfo.create_time,
-            AlertInfo.update_time,
-            DeviceInfo.hostname,
-            DeviceInfo.business_ip,
-            DeviceInfo.location
-        ).join(DeviceInfo, AlertInfo.device_id == DeviceInfo.device_id)
+            AlertInfoDO.alert_id,
+            AlertInfoDO.device_id,
+            AlertInfoDO.component_type,
+            AlertInfoDO.component_name,
+            AlertInfoDO.health_status,
+            AlertInfoDO.urgency_level,
+            AlertInfoDO.alert_status,
+            AlertInfoDO.first_occurrence,
+            AlertInfoDO.last_occurrence,
+            AlertInfoDO.resolved_time,
+            AlertInfoDO.scheduled_maintenance_time,
+            AlertInfoDO.maintenance_description,
+            AlertInfoDO.maintenance_status,
+            AlertInfoDO.maintenance_notes,
+            AlertInfoDO.create_time,
+            AlertInfoDO.update_time,
+            DeviceInfoDO.hostname,
+            DeviceInfoDO.business_ip,
+            DeviceInfoDO.location
+        ).join(DeviceInfoDO, AlertInfoDO.device_id == DeviceInfoDO.device_id)
         
         # 构建查询条件
         conditions = [
-            AlertInfo.alert_status != 'deleted'  # 排除已删除的告警
+            AlertInfoDO.alert_status != 'deleted'  # 排除已删除的告警
         ]
         
         if query_object.device_id:
-            conditions.append(AlertInfo.device_id == query_object.device_id)
+            conditions.append(AlertInfoDO.device_id == query_object.device_id)
         
         if query_object.hostname:
-            conditions.append(DeviceInfo.hostname.like(f'%{query_object.hostname}%'))
+            conditions.append(DeviceInfoDO.hostname.like(f'%{query_object.hostname}%'))
         
         if query_object.business_ip:
-            conditions.append(DeviceInfo.business_ip.like(f'%{query_object.business_ip}%'))
+            conditions.append(DeviceInfoDO.business_ip.like(f'%{query_object.business_ip}%'))
         
         if query_object.component_type:
-            conditions.append(AlertInfo.component_type == query_object.component_type)
+            conditions.append(AlertInfoDO.component_type == query_object.component_type)
         
         if query_object.urgency_level:
-            conditions.append(AlertInfo.urgency_level == query_object.urgency_level)
+            conditions.append(AlertInfoDO.urgency_level == query_object.urgency_level)
         
         if query_object.health_status:
-            conditions.append(AlertInfo.health_status == query_object.health_status)
+            conditions.append(AlertInfoDO.health_status == query_object.health_status)
         
         if query_object.alert_status:
-            conditions.append(AlertInfo.alert_status == query_object.alert_status)
+            conditions.append(AlertInfoDO.alert_status == query_object.alert_status)
         
         if query_object.start_time:
-            conditions.append(AlertInfo.first_occurrence >= query_object.start_time)
+            conditions.append(AlertInfoDO.first_occurrence >= query_object.start_time)
         
         if query_object.end_time:
-            conditions.append(AlertInfo.first_occurrence <= query_object.end_time)
+            conditions.append(AlertInfoDO.first_occurrence <= query_object.end_time)
         
         if conditions:
             query = query.where(and_(*conditions))
         
         # 排序：紧急告警优先，然后按首次发生时间倒序
         query = query.order_by(
-            desc(AlertInfo.urgency_level == 'urgent'),
-            desc(AlertInfo.first_occurrence)
+            desc(AlertInfoDO.urgency_level == 'urgent'),
+            desc(AlertInfoDO.first_occurrence)
         )
         
         # 分页
         if is_page:
             # 获取总数（优化的计数查询）
-            count_query = select(func.count(AlertInfo.alert_id)).select_from(
-                AlertInfo.__table__.join(DeviceInfo.__table__, AlertInfo.device_id == DeviceInfo.device_id)
+            count_query = select(func.count(AlertInfoDO.alert_id)).select_from(
+                AlertInfoDO.__table__.join(DeviceInfoDO.__table__, AlertInfoDO.device_id == DeviceInfoDO.device_id)
             )
             if conditions:
                 count_query = count_query.where(and_(*conditions))
@@ -191,27 +191,27 @@ class AlertDao:
             Optional[Dict[str, Any]]: 告警详情
         """
         query = select(
-            AlertInfo.alert_id,
-            AlertInfo.device_id,
-            AlertInfo.component_type,
-            AlertInfo.component_name,
-            AlertInfo.health_status,
-            AlertInfo.urgency_level,
-            AlertInfo.alert_status,
-            AlertInfo.first_occurrence,
-            AlertInfo.last_occurrence,
-            AlertInfo.resolved_time,
-            AlertInfo.create_time,
-            AlertInfo.update_time,
-            DeviceInfo.hostname,
-            DeviceInfo.business_ip,
-            DeviceInfo.location,
-            DeviceInfo.business_type,
-            DeviceInfo.system_owner
-        ).join(DeviceInfo, AlertInfo.device_id == DeviceInfo.device_id
+            AlertInfoDO.alert_id,
+            AlertInfoDO.device_id,
+            AlertInfoDO.component_type,
+            AlertInfoDO.component_name,
+            AlertInfoDO.health_status,
+            AlertInfoDO.urgency_level,
+            AlertInfoDO.alert_status,
+            AlertInfoDO.first_occurrence,
+            AlertInfoDO.last_occurrence,
+            AlertInfoDO.resolved_time,
+            AlertInfoDO.create_time,
+            AlertInfoDO.update_time,
+            DeviceInfoDO.hostname,
+            DeviceInfoDO.business_ip,
+            DeviceInfoDO.location,
+            DeviceInfoDO.business_type,
+            DeviceInfoDO.system_owner
+        ).join(DeviceInfoDO, AlertInfoDO.device_id == DeviceInfoDO.device_id
         ).where(
-            AlertInfo.alert_id == alert_id,
-            AlertInfo.alert_status != 'deleted'  # 排除已删除的告警
+            AlertInfoDO.alert_id == alert_id,
+            AlertInfoDO.alert_status != 'deleted'  # 排除已删除的告警
         )
         
         result = await db.execute(query)
@@ -270,12 +270,12 @@ class AlertDao:
         try:
             # 查找是否存在相同的活跃告警
             existing_alert_result = await db.execute(
-                select(AlertInfo).where(
+                select(AlertInfoDO).where(
                     and_(
-                        AlertInfo.device_id == device_id,
-                        AlertInfo.component_type == component_type,
-                        AlertInfo.component_name == component_name,
-                        AlertInfo.alert_status == 'active'
+                        AlertInfoDO.device_id == device_id,
+                        AlertInfoDO.component_type == component_type,
+                        AlertInfoDO.component_name == component_name,
+                        AlertInfoDO.alert_status == 'active'
                     )
                 )
             )
@@ -295,7 +295,7 @@ class AlertDao:
                 return existing_alert.alert_id
             else:
                 # 创建新告警
-                new_alert = AlertInfo(
+                new_alert = AlertInfoDO(
                     device_id=device_id,
                     component_type=component_type,
                     component_name=component_name,
@@ -337,18 +337,18 @@ class AlertDao:
         
         # 总告警数
         total_result = await db.execute(
-            select(func.count(AlertInfo.alert_id))
-            .where(AlertInfo.first_occurrence >= start_date)
+            select(func.count(AlertInfoDO.alert_id))
+            .where(AlertInfoDO.first_occurrence >= start_date)
         )
         total_alerts = total_result.scalar() or 0
         
         # 紧急告警数
         urgent_result = await db.execute(
-            select(func.count(AlertInfo.alert_id))
+            select(func.count(AlertInfoDO.alert_id))
             .where(
                 and_(
-                    AlertInfo.first_occurrence >= start_date,
-                    AlertInfo.urgency_level == 'urgent'
+                    AlertInfoDO.first_occurrence >= start_date,
+                    AlertInfoDO.urgency_level == 'urgent'
                 )
             )
         )
@@ -356,11 +356,11 @@ class AlertDao:
         
         # 择期告警数
         scheduled_result = await db.execute(
-            select(func.count(AlertInfo.alert_id))
+            select(func.count(AlertInfoDO.alert_id))
             .where(
                 and_(
-                    AlertInfo.first_occurrence >= start_date,
-                    AlertInfo.urgency_level == 'scheduled'
+                    AlertInfoDO.first_occurrence >= start_date,
+                    AlertInfoDO.urgency_level == 'scheduled'
                 )
             )
         )
@@ -368,18 +368,18 @@ class AlertDao:
         
         # 活跃告警数
         active_result = await db.execute(
-            select(func.count(AlertInfo.alert_id))
-            .where(AlertInfo.alert_status == 'active')
+            select(func.count(AlertInfoDO.alert_id))
+            .where(AlertInfoDO.alert_status == 'active')
         )
         active_alerts = active_result.scalar() or 0
         
         # 已解决告警数
         resolved_result = await db.execute(
-            select(func.count(AlertInfo.alert_id))
+            select(func.count(AlertInfoDO.alert_id))
             .where(
                 and_(
-                    AlertInfo.first_occurrence >= start_date,
-                    AlertInfo.alert_status == 'resolved'
+                    AlertInfoDO.first_occurrence >= start_date,
+                    AlertInfoDO.alert_status == 'resolved'
                 )
             )
         )
@@ -407,23 +407,23 @@ class AlertDao:
             List[Dict[str, Any]]: 实时告警列表
         """
         query = select(
-            AlertInfo.alert_id,
-            AlertInfo.device_id,
-            AlertInfo.component_type,
-            AlertInfo.component_name,
-            AlertInfo.health_status,
-            AlertInfo.urgency_level,
-            AlertInfo.first_occurrence,
-            AlertInfo.last_occurrence,
-            DeviceInfo.hostname,
-            DeviceInfo.business_ip
-        ).join(DeviceInfo, AlertInfo.device_id == DeviceInfo.device_id
+            AlertInfoDO.alert_id,
+            AlertInfoDO.device_id,
+            AlertInfoDO.component_type,
+            AlertInfoDO.component_name,
+            AlertInfoDO.health_status,
+            AlertInfoDO.urgency_level,
+            AlertInfoDO.first_occurrence,
+            AlertInfoDO.last_occurrence,
+            DeviceInfoDO.hostname,
+            DeviceInfoDO.business_ip
+        ).join(DeviceInfoDO, AlertInfoDO.device_id == DeviceInfoDO.device_id
         ).where(
             and_(
-                AlertInfo.urgency_level == 'urgent',
-                AlertInfo.alert_status == 'active'
+                AlertInfoDO.urgency_level == 'urgent',
+                AlertInfoDO.alert_status == 'active'
             )
-        ).order_by(desc(AlertInfo.first_occurrence)).limit(limit)
+        ).order_by(desc(AlertInfoDO.first_occurrence)).limit(limit)
         
         result = await db.execute(query)
         
@@ -458,23 +458,23 @@ class AlertDao:
             List[Dict[str, Any]]: 择期告警列表
         """
         query = select(
-            AlertInfo.alert_id,
-            AlertInfo.device_id,
-            AlertInfo.component_type,
-            AlertInfo.component_name,
-            AlertInfo.health_status,
-            AlertInfo.urgency_level,
-            AlertInfo.first_occurrence,
-            AlertInfo.last_occurrence,
-            DeviceInfo.hostname,
-            DeviceInfo.business_ip
-        ).join(DeviceInfo, AlertInfo.device_id == DeviceInfo.device_id
+            AlertInfoDO.alert_id,
+            AlertInfoDO.device_id,
+            AlertInfoDO.component_type,
+            AlertInfoDO.component_name,
+            AlertInfoDO.health_status,
+            AlertInfoDO.urgency_level,
+            AlertInfoDO.first_occurrence,
+            AlertInfoDO.last_occurrence,
+            DeviceInfoDO.hostname,
+            DeviceInfoDO.business_ip
+        ).join(DeviceInfoDO, AlertInfoDO.device_id == DeviceInfoDO.device_id
         ).where(
             and_(
-                AlertInfo.urgency_level == 'scheduled',
-                AlertInfo.alert_status == 'active'
+                AlertInfoDO.urgency_level == 'scheduled',
+                AlertInfoDO.alert_status == 'active'
             )
-        ).order_by(desc(AlertInfo.first_occurrence)).limit(limit)
+        ).order_by(desc(AlertInfoDO.first_occurrence)).limit(limit)
         
         result = await db.execute(query)
         
@@ -517,11 +517,11 @@ class AlertDao:
             
             # 当日紧急告警数
             urgent_result = await db.execute(
-                select(func.count(AlertInfo.alert_id)).where(
+                select(func.count(AlertInfoDO.alert_id)).where(
                     and_(
-                        AlertInfo.first_occurrence >= current_date,
-                        AlertInfo.first_occurrence < next_date,
-                        AlertInfo.urgency_level == 'urgent'
+                        AlertInfoDO.first_occurrence >= current_date,
+                        AlertInfoDO.first_occurrence < next_date,
+                        AlertInfoDO.urgency_level == 'urgent'
                     )
                 )
             )
@@ -529,11 +529,11 @@ class AlertDao:
             
             # 当日择期告警数
             scheduled_result = await db.execute(
-                select(func.count(AlertInfo.alert_id)).where(
+                select(func.count(AlertInfoDO.alert_id)).where(
                     and_(
-                        AlertInfo.first_occurrence >= current_date,
-                        AlertInfo.first_occurrence < next_date,
-                        AlertInfo.urgency_level == 'scheduled'
+                        AlertInfoDO.first_occurrence >= current_date,
+                        AlertInfoDO.first_occurrence < next_date,
+                        AlertInfoDO.urgency_level == 'scheduled'
                     )
                 )
             )
@@ -561,35 +561,35 @@ class AlertDao:
         """
         # 按紧急程度分布
         level_result = await db.execute(
-            select(AlertInfo.urgency_level, func.count(AlertInfo.alert_id))
-            .where(AlertInfo.alert_status == 'active')
-            .group_by(AlertInfo.urgency_level)
+            select(AlertInfoDO.urgency_level, func.count(AlertInfoDO.alert_id))
+            .where(AlertInfoDO.alert_status == 'active')
+            .group_by(AlertInfoDO.urgency_level)
         )
         by_level = {row[0]: row[1] for row in level_result.fetchall()}
         
         # 按组件类型分布
         component_result = await db.execute(
-            select(AlertInfo.component_type, func.count(AlertInfo.alert_id))
-            .where(AlertInfo.alert_status == 'active')
-            .group_by(AlertInfo.component_type)
+            select(AlertInfoDO.component_type, func.count(AlertInfoDO.alert_id))
+            .where(AlertInfoDO.alert_status == 'active')
+            .group_by(AlertInfoDO.component_type)
         )
         by_component = {row[0]: row[1] for row in component_result.fetchall()}
         
         # 按位置分布（通过关联设备表）
         location_result = await db.execute(
-            select(DeviceInfo.location, func.count(AlertInfo.alert_id))
-            .select_from(AlertInfo.__table__.join(DeviceInfo.__table__, AlertInfo.device_id == DeviceInfo.device_id))
-            .where(AlertInfo.alert_status == 'active')
-            .group_by(DeviceInfo.location)
+            select(DeviceInfoDO.location, func.count(AlertInfoDO.alert_id))
+            .select_from(AlertInfoDO.__table__.join(DeviceInfoDO.__table__, AlertInfoDO.device_id == DeviceInfoDO.device_id))
+            .where(AlertInfoDO.alert_status == 'active')
+            .group_by(DeviceInfoDO.location)
         )
         by_location = {row[0]: row[1] for row in location_result.fetchall()}
         
         # 按制造商分布（通过关联设备表）
         manufacturer_result = await db.execute(
-            select(DeviceInfo.manufacturer, func.count(AlertInfo.alert_id))
-            .select_from(AlertInfo.__table__.join(DeviceInfo.__table__, AlertInfo.device_id == DeviceInfo.device_id))
-            .where(AlertInfo.alert_status == 'active')
-            .group_by(DeviceInfo.manufacturer)
+            select(DeviceInfoDO.manufacturer, func.count(AlertInfoDO.alert_id))
+            .select_from(AlertInfoDO.__table__.join(DeviceInfoDO.__table__, AlertInfoDO.device_id == DeviceInfoDO.device_id))
+            .where(AlertInfoDO.alert_status == 'active')
+            .group_by(DeviceInfoDO.manufacturer)
         )
         by_manufacturer = {row[0]: row[1] for row in manufacturer_result.fetchall()}
         
@@ -620,8 +620,8 @@ class AlertDao:
         """
         try:
             # 更新告警的维修信息
-            update_stmt = update(AlertInfo).where(
-                AlertInfo.alert_id == alert_id
+            update_stmt = update(AlertInfoDO).where(
+                AlertInfoDO.alert_id == alert_id
             ).values(
                 scheduled_maintenance_time=maintenance_data.get('scheduled_maintenance_time'),
                 maintenance_description=maintenance_data.get('maintenance_description'),
@@ -672,8 +672,8 @@ class AlertDao:
                 if value is not None:
                     update_values[key] = value
             
-            update_stmt = update(AlertInfo).where(
-                AlertInfo.alert_id == alert_id
+            update_stmt = update(AlertInfoDO).where(
+                AlertInfoDO.alert_id == alert_id
             ).values(**update_values)
             
             result = await db.execute(update_stmt)
@@ -709,8 +709,8 @@ class AlertDao:
             int: 成功更新的记录数
         """
         try:
-            update_stmt = update(AlertInfo).where(
-                AlertInfo.alert_id.in_(alert_ids)
+            update_stmt = update(AlertInfoDO).where(
+                AlertInfoDO.alert_id.in_(alert_ids)
             ).values(
                 scheduled_maintenance_time=maintenance_data.get('scheduled_maintenance_time'),
                 maintenance_description=maintenance_data.get('maintenance_description'),
@@ -753,44 +753,44 @@ class AlertDao:
             Tuple[List[Dict[str, Any]], int]: 维修计划列表和总数
         """
         query = select(
-            AlertInfo.alert_id,
-            AlertInfo.device_id,
-            AlertInfo.component_type,
-            AlertInfo.component_name,
-            AlertInfo.health_status,
-            AlertInfo.urgency_level,
-            AlertInfo.scheduled_maintenance_time,
-            AlertInfo.maintenance_description,
-            AlertInfo.maintenance_status,
-            AlertInfo.maintenance_notes,
-            DeviceInfo.hostname,
-            DeviceInfo.business_ip,
-            DeviceInfo.location
-        ).join(DeviceInfo, AlertInfo.device_id == DeviceInfo.device_id
-        ).where(AlertInfo.maintenance_status != 'none')
+            AlertInfoDO.alert_id,
+            AlertInfoDO.device_id,
+            AlertInfoDO.component_type,
+            AlertInfoDO.component_name,
+            AlertInfoDO.health_status,
+            AlertInfoDO.urgency_level,
+            AlertInfoDO.scheduled_maintenance_time,
+            AlertInfoDO.maintenance_description,
+            AlertInfoDO.maintenance_status,
+            AlertInfoDO.maintenance_notes,
+            DeviceInfoDO.hostname,
+            DeviceInfoDO.business_ip,
+            DeviceInfoDO.location
+        ).join(DeviceInfoDO, AlertInfoDO.device_id == DeviceInfoDO.device_id
+        ).where(AlertInfoDO.maintenance_status != 'none')
         
         # 构建查询条件
         conditions = []
         if query_object:
             if query_object.get('device_id'):
-                conditions.append(AlertInfo.device_id == query_object['device_id'])
+                conditions.append(AlertInfoDO.device_id == query_object['device_id'])
             if query_object.get('maintenance_status'):
-                conditions.append(AlertInfo.maintenance_status == query_object['maintenance_status'])
+                conditions.append(AlertInfoDO.maintenance_status == query_object['maintenance_status'])
             if query_object.get('scheduled_start_time'):
-                conditions.append(AlertInfo.scheduled_maintenance_time >= query_object['scheduled_start_time'])
+                conditions.append(AlertInfoDO.scheduled_maintenance_time >= query_object['scheduled_start_time'])
             if query_object.get('scheduled_end_time'):
-                conditions.append(AlertInfo.scheduled_maintenance_time <= query_object['scheduled_end_time'])
+                conditions.append(AlertInfoDO.scheduled_maintenance_time <= query_object['scheduled_end_time'])
         
         if conditions:
             query = query.where(and_(*conditions))
         
         # 排序：按计划维修时间排序
-        query = query.order_by(asc(AlertInfo.scheduled_maintenance_time))
+        query = query.order_by(asc(AlertInfoDO.scheduled_maintenance_time))
         
         # 获取总数
-        count_query = select(func.count(AlertInfo.alert_id)).select_from(
-            AlertInfo.__table__.join(DeviceInfo.__table__, AlertInfo.device_id == DeviceInfo.device_id)
-        ).where(AlertInfo.maintenance_status != 'none')
+        count_query = select(func.count(AlertInfoDO.alert_id)).select_from(
+            AlertInfoDO.__table__.join(DeviceInfoDO.__table__, AlertInfoDO.device_id == DeviceInfoDO.device_id)
+        ).where(AlertInfoDO.maintenance_status != 'none')
         if conditions:
             count_query = count_query.where(and_(*conditions))
         
@@ -848,30 +848,30 @@ class AlertDao:
             end_datetime = datetime.strptime(f"{end_date} 23:59:59", "%Y-%m-%d %H:%M:%S")
             
             query = select(
-                AlertInfo.alert_id,
-                AlertInfo.device_id,
-                AlertInfo.component_type,
-                AlertInfo.component_name,
-                AlertInfo.health_status,
-                AlertInfo.urgency_level,
-                AlertInfo.alert_status,
-                AlertInfo.scheduled_maintenance_time,
-                AlertInfo.maintenance_description,
-                AlertInfo.maintenance_status,
-                AlertInfo.maintenance_notes,
-                AlertInfo.first_occurrence,
-                AlertInfo.last_occurrence,
-                DeviceInfo.hostname,
-                DeviceInfo.business_ip
+                AlertInfoDO.alert_id,
+                AlertInfoDO.device_id,
+                AlertInfoDO.component_type,
+                AlertInfoDO.component_name,
+                AlertInfoDO.health_status,
+                AlertInfoDO.urgency_level,
+                AlertInfoDO.alert_status,
+                AlertInfoDO.scheduled_maintenance_time,
+                AlertInfoDO.maintenance_description,
+                AlertInfoDO.maintenance_status,
+                AlertInfoDO.maintenance_notes,
+                AlertInfoDO.first_occurrence,
+                AlertInfoDO.last_occurrence,
+                DeviceInfoDO.hostname,
+                DeviceInfoDO.business_ip
             ).join(
-                DeviceInfo, AlertInfo.device_id == DeviceInfo.device_id
+                DeviceInfoDO, AlertInfoDO.device_id == DeviceInfoDO.device_id
             ).where(
                 and_(
-                    AlertInfo.scheduled_maintenance_time.isnot(None),
-                    AlertInfo.scheduled_maintenance_time >= start_datetime,
-                    AlertInfo.scheduled_maintenance_time <= end_datetime
+                    AlertInfoDO.scheduled_maintenance_time.isnot(None),
+                    AlertInfoDO.scheduled_maintenance_time >= start_datetime,
+                    AlertInfoDO.scheduled_maintenance_time <= end_datetime
                 )
-            ).order_by(asc(AlertInfo.scheduled_maintenance_time))
+            ).order_by(asc(AlertInfoDO.scheduled_maintenance_time))
             
             result = await db.execute(query)
             return result.fetchall()
@@ -900,9 +900,9 @@ class AlertDao:
         """
         try:
             # 逻辑删除：修改状态为deleted
-            stmt = update(AlertInfo).where(
-                AlertInfo.alert_id == alert_id,
-                AlertInfo.alert_status != 'deleted'  # 防止重复删除
+            stmt = update(AlertInfoDO).where(
+                AlertInfoDO.alert_id == alert_id,
+                AlertInfoDO.alert_status != 'deleted'  # 防止重复删除
             ).values(
                 alert_status='deleted',
                 resolved_time=datetime.now(),
@@ -940,9 +940,9 @@ class AlertDao:
         """
         try:
             # 逻辑删除：修改状态为deleted
-            stmt = update(AlertInfo).where(
-                AlertInfo.alert_id.in_(alert_ids),
-                AlertInfo.alert_status != 'deleted'  # 防止重复删除
+            stmt = update(AlertInfoDO).where(
+                AlertInfoDO.alert_id.in_(alert_ids),
+                AlertInfoDO.alert_status != 'deleted'  # 防止重复删除
             ).values(
                 alert_status='deleted',
                 resolved_time=datetime.now(),
@@ -961,7 +961,7 @@ class AlertDao:
             return 0
     
     @classmethod
-    async def get_alert_info_by_id(cls, db: AsyncSession, alert_id: int) -> Optional[AlertInfo]:
+    async def get_alert_info_by_id(cls, db: AsyncSession, alert_id: int) -> Optional[AlertInfoDO]:
         """
         根据ID获取告警信息（返回SQLAlchemy对象）
         
@@ -970,12 +970,12 @@ class AlertDao:
             alert_id: 告警ID
             
         Returns:
-            Optional[AlertInfo]: 告警信息
+            Optional[AlertInfoDO]: 告警信息
         """
         try:
-            stmt = select(AlertInfo).where(
-                AlertInfo.alert_id == alert_id,
-                AlertInfo.alert_status != 'deleted'  # 排除已删除的告警
+            stmt = select(AlertInfoDO).where(
+                AlertInfoDO.alert_id == alert_id,
+                AlertInfoDO.alert_status != 'deleted'  # 排除已删除的告警
             )
             result = await db.execute(stmt)
             return result.scalar_one_or_none()

@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple, Dict, Any
 from sqlalchemy import select, func, and_, or_, desc, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from module_redfish.models import BusinessHardwareUrgencyRules, BusinessTypeDict, HardwareTypeDict
+from module_redfish.entity.do import BusinessHardwareUrgencyRulesDO, BusinessTypeDictDO, HardwareTypeDictDO
 from module_redfish.entity.vo.business_rule_vo import (
     BusinessRulePageQueryModel, AddBusinessRuleModel, EditBusinessRuleModel,
     BusinessTypeQueryModel, HardwareTypeQueryModel, UrgencyRuleQueryModel,
@@ -25,7 +25,7 @@ class BusinessRuleDao:
         db: AsyncSession,
         query_object: BusinessRulePageQueryModel,
         is_page: bool = False
-    ) -> Tuple[List[BusinessHardwareUrgencyRules], int]:
+    ) -> Tuple[List[BusinessHardwareUrgencyRulesDO], int]:
         """
         获取规则列表
         
@@ -35,35 +35,35 @@ class BusinessRuleDao:
             is_page: 是否分页
             
         Returns:
-            Tuple[List[BusinessHardwareUrgencyRules], int]: 规则列表和总数
+            Tuple[List[BusinessHardwareUrgencyRulesDO], int]: 规则列表和总数
         """
-        query = select(BusinessHardwareUrgencyRules)
+        query = select(BusinessHardwareUrgencyRulesDO)
         
         # 构建查询条件
         conditions = []
         
         if query_object.business_type:
-            conditions.append(BusinessHardwareUrgencyRules.business_type.like(f'%{query_object.business_type}%'))
+            conditions.append(BusinessHardwareUrgencyRulesDO.business_type.like(f'%{query_object.business_type}%'))
         
         if query_object.hardware_type:
-            conditions.append(BusinessHardwareUrgencyRules.hardware_type.like(f'%{query_object.hardware_type}%'))
+            conditions.append(BusinessHardwareUrgencyRulesDO.hardware_type.like(f'%{query_object.hardware_type}%'))
         
         if query_object.urgency_level:
-            conditions.append(BusinessHardwareUrgencyRules.urgency_level == query_object.urgency_level)
+            conditions.append(BusinessHardwareUrgencyRulesDO.urgency_level == query_object.urgency_level)
         
         if query_object.is_active is not None:
-            conditions.append(BusinessHardwareUrgencyRules.is_active == query_object.is_active)
+            conditions.append(BusinessHardwareUrgencyRulesDO.is_active == query_object.is_active)
         
         if conditions:
             query = query.where(and_(*conditions))
         
         # 排序
-        query = query.order_by(desc(BusinessHardwareUrgencyRules.create_time))
+        query = query.order_by(desc(BusinessHardwareUrgencyRulesDO.create_time))
         
         # 分页
         if is_page:
             # 获取总数
-            count_query = select(func.count(BusinessHardwareUrgencyRules.rule_id))
+            count_query = select(func.count(BusinessHardwareUrgencyRulesDO.rule_id))
             if conditions:
                 count_query = count_query.where(and_(*conditions))
             total_count = await db.scalar(count_query)
@@ -80,7 +80,7 @@ class BusinessRuleDao:
             return rule_list, len(rule_list)
     
     @classmethod
-    async def get_rule_by_id(cls, db: AsyncSession, rule_id: int) -> Optional[BusinessHardwareUrgencyRules]:
+    async def get_rule_by_id(cls, db: AsyncSession, rule_id: int) -> Optional[BusinessHardwareUrgencyRulesDO]:
         """
         根据ID获取规则信息
         
@@ -89,10 +89,10 @@ class BusinessRuleDao:
             rule_id: 规则ID
             
         Returns:
-            Optional[BusinessHardwareUrgencyRules]: 规则信息
+            Optional[BusinessHardwareUrgencyRulesDO]: 规则信息
         """
         result = await db.execute(
-            select(BusinessHardwareUrgencyRules).where(BusinessHardwareUrgencyRules.rule_id == rule_id)
+            select(BusinessHardwareUrgencyRulesDO).where(BusinessHardwareUrgencyRulesDO.rule_id == rule_id)
         )
         return result.scalar_one_or_none()
     
@@ -102,7 +102,7 @@ class BusinessRuleDao:
         db: AsyncSession, 
         business_type: str, 
         hardware_type: str
-    ) -> Optional[BusinessHardwareUrgencyRules]:
+    ) -> Optional[BusinessHardwareUrgencyRulesDO]:
         """
         根据业务类型和硬件类型获取规则
         
@@ -112,14 +112,14 @@ class BusinessRuleDao:
             hardware_type: 硬件类型
             
         Returns:
-            Optional[BusinessHardwareUrgencyRules]: 规则信息
+            Optional[BusinessHardwareUrgencyRulesDO]: 规则信息
         """
         result = await db.execute(
-            select(BusinessHardwareUrgencyRules).where(
+            select(BusinessHardwareUrgencyRulesDO).where(
                 and_(
-                    BusinessHardwareUrgencyRules.business_type == business_type,
-                    BusinessHardwareUrgencyRules.hardware_type == hardware_type,
-                    BusinessHardwareUrgencyRules.is_active == 1
+                    BusinessHardwareUrgencyRulesDO.business_type == business_type,
+                    BusinessHardwareUrgencyRulesDO.hardware_type == hardware_type,
+                    BusinessHardwareUrgencyRulesDO.is_active == 1
                 )
             )
         )
@@ -146,20 +146,20 @@ class BusinessRuleDao:
             bool: 是否存在
         """
         conditions = [
-            BusinessHardwareUrgencyRules.business_type == business_type,
-            BusinessHardwareUrgencyRules.hardware_type == hardware_type
+            BusinessHardwareUrgencyRulesDO.business_type == business_type,
+            BusinessHardwareUrgencyRulesDO.hardware_type == hardware_type
         ]
         
         if exclude_rule_id:
-            conditions.append(BusinessHardwareUrgencyRules.rule_id != exclude_rule_id)
+            conditions.append(BusinessHardwareUrgencyRulesDO.rule_id != exclude_rule_id)
         
         result = await db.execute(
-            select(BusinessHardwareUrgencyRules).where(and_(*conditions))
+            select(BusinessHardwareUrgencyRulesDO).where(and_(*conditions))
         )
         return result.scalar_one_or_none() is not None
     
     @classmethod
-    async def add_rule(cls, db: AsyncSession, rule: AddBusinessRuleModel) -> BusinessHardwareUrgencyRules:
+    async def add_rule(cls, db: AsyncSession, rule: AddBusinessRuleModel) -> BusinessHardwareUrgencyRulesDO:
         """
         添加规则
         
@@ -168,9 +168,9 @@ class BusinessRuleDao:
             rule: 规则信息
             
         Returns:
-            BusinessHardwareUrgencyRules: 新增的规则信息
+            BusinessHardwareUrgencyRulesDO: 新增的规则信息
         """
-        db_rule = BusinessHardwareUrgencyRules(**rule.model_dump())
+        db_rule = BusinessHardwareUrgencyRulesDO(**rule.model_dump())
         db.add(db_rule)
         await db.commit()
         await db.refresh(db_rule)
@@ -189,7 +189,7 @@ class BusinessRuleDao:
             bool: 是否成功
         """
         result = await db.execute(
-            select(BusinessHardwareUrgencyRules).where(BusinessHardwareUrgencyRules.rule_id == rule.rule_id)
+            select(BusinessHardwareUrgencyRulesDO).where(BusinessHardwareUrgencyRulesDO.rule_id == rule.rule_id)
         )
         db_rule = result.scalar_one_or_none()
         
@@ -217,7 +217,7 @@ class BusinessRuleDao:
             bool: 是否成功
         """
         await db.execute(
-            delete(BusinessHardwareUrgencyRules).where(BusinessHardwareUrgencyRules.rule_id.in_(rule_ids))
+            delete(BusinessHardwareUrgencyRulesDO).where(BusinessHardwareUrgencyRulesDO.rule_id.in_(rule_ids))
         )
         await db.commit()
         return True
@@ -235,24 +235,24 @@ class BusinessRuleDao:
         """
         # 总规则数
         total_result = await db.execute(
-            select(func.count(BusinessHardwareUrgencyRules.rule_id))
+            select(func.count(BusinessHardwareUrgencyRulesDO.rule_id))
         )
         total_rules = total_result.scalar()
         
         # 启用规则数
         active_result = await db.execute(
-            select(func.count(BusinessHardwareUrgencyRules.rule_id)).where(
-                BusinessHardwareUrgencyRules.is_active == 1
+            select(func.count(BusinessHardwareUrgencyRulesDO.rule_id)).where(
+                BusinessHardwareUrgencyRulesDO.is_active == 1
             )
         )
         active_rules = active_result.scalar()
         
         # 紧急规则数
         urgent_result = await db.execute(
-            select(func.count(BusinessHardwareUrgencyRules.rule_id)).where(
+            select(func.count(BusinessHardwareUrgencyRulesDO.rule_id)).where(
                 and_(
-                    BusinessHardwareUrgencyRules.urgency_level == 'urgent',
-                    BusinessHardwareUrgencyRules.is_active == 1
+                    BusinessHardwareUrgencyRulesDO.urgency_level == 'urgent',
+                    BusinessHardwareUrgencyRulesDO.is_active == 1
                 )
             )
         )
@@ -260,10 +260,10 @@ class BusinessRuleDao:
         
         # 择期规则数
         scheduled_result = await db.execute(
-            select(func.count(BusinessHardwareUrgencyRules.rule_id)).where(
+            select(func.count(BusinessHardwareUrgencyRulesDO.rule_id)).where(
                 and_(
-                    BusinessHardwareUrgencyRules.urgency_level == 'scheduled',
-                    BusinessHardwareUrgencyRules.is_active == 1
+                    BusinessHardwareUrgencyRulesDO.urgency_level == 'scheduled',
+                    BusinessHardwareUrgencyRulesDO.is_active == 1
                 )
             )
         )
@@ -271,13 +271,13 @@ class BusinessRuleDao:
         
         # 业务类型列表
         business_types_result = await db.execute(
-            select(BusinessHardwareUrgencyRules.business_type).distinct()
+            select(BusinessHardwareUrgencyRulesDO.business_type).distinct()
         )
         business_types = [row[0] for row in business_types_result.fetchall()]
         
         # 硬件类型列表
         hardware_types_result = await db.execute(
-            select(BusinessHardwareUrgencyRules.hardware_type).distinct()
+            select(BusinessHardwareUrgencyRulesDO.hardware_type).distinct()
         )
         hardware_types = [row[0] for row in hardware_types_result.fetchall()]
         
@@ -304,8 +304,8 @@ class BusinessRuleDao:
             bool: 是否成功
         """
         result = await db.execute(
-            select(BusinessHardwareUrgencyRules).where(
-                BusinessHardwareUrgencyRules.rule_id.in_(rule_ids)
+            select(BusinessHardwareUrgencyRulesDO).where(
+                BusinessHardwareUrgencyRulesDO.rule_id.in_(rule_ids)
             )
         )
         rules = result.scalars().all()
@@ -326,24 +326,24 @@ class BusinessTypeDao:
         db: AsyncSession,
         query_object: BusinessTypeQueryModel,
         is_page: bool = False
-    ) -> Tuple[List[BusinessTypeDict], int]:
+    ) -> Tuple[List[BusinessTypeDictDO], int]:
         """获取业务类型列表"""
         conditions = []
         
         if query_object.type_code:
-            conditions.append(BusinessTypeDict.type_code.like(f'%{query_object.type_code}%'))
+            conditions.append(BusinessTypeDictDO.type_code.like(f'%{query_object.type_code}%'))
         if query_object.type_name:
-            conditions.append(BusinessTypeDict.type_name.like(f'%{query_object.type_name}%'))
+            conditions.append(BusinessTypeDictDO.type_name.like(f'%{query_object.type_name}%'))
         if query_object.is_active is not None:
-            conditions.append(BusinessTypeDict.is_active == query_object.is_active)
+            conditions.append(BusinessTypeDictDO.is_active == query_object.is_active)
         
-        query = select(BusinessTypeDict)
+        query = select(BusinessTypeDictDO)
         if conditions:
             query = query.where(and_(*conditions))
         
-        query = query.order_by(BusinessTypeDict.sort_order.asc(), BusinessTypeDict.create_time.desc())
+        query = query.order_by(BusinessTypeDictDO.sort_order.asc(), BusinessTypeDictDO.create_time.desc())
         
-        count_query = select(func.count(BusinessTypeDict.type_id))
+        count_query = select(func.count(BusinessTypeDictDO.type_id))
         if conditions:
             count_query = count_query.where(and_(*conditions))
         
@@ -360,23 +360,23 @@ class BusinessTypeDao:
         return business_types, total
     
     @staticmethod
-    async def get_business_type_by_id(db: AsyncSession, type_id: int) -> Optional[BusinessTypeDict]:
+    async def get_business_type_by_id(db: AsyncSession, type_id: int) -> Optional[BusinessTypeDictDO]:
         """根据ID获取业务类型"""
-        query = select(BusinessTypeDict).where(BusinessTypeDict.type_id == type_id)
+        query = select(BusinessTypeDictDO).where(BusinessTypeDictDO.type_id == type_id)
         result = await db.execute(query)
         return result.scalar_one_or_none()
     
     @staticmethod
-    async def get_business_type_by_code(db: AsyncSession, type_code: str) -> Optional[BusinessTypeDict]:
+    async def get_business_type_by_code(db: AsyncSession, type_code: str) -> Optional[BusinessTypeDictDO]:
         """根据编码获取业务类型"""
-        query = select(BusinessTypeDict).where(BusinessTypeDict.type_code == type_code)
+        query = select(BusinessTypeDictDO).where(BusinessTypeDictDO.type_code == type_code)
         result = await db.execute(query)
         return result.scalar_one_or_none()
     
     @staticmethod
-    async def add_business_type(db: AsyncSession, business_type: AddBusinessTypeModel) -> BusinessTypeDict:
+    async def add_business_type(db: AsyncSession, business_type: AddBusinessTypeModel) -> BusinessTypeDictDO:
         """新增业务类型"""
-        new_business_type = BusinessTypeDict(
+        new_business_type = BusinessTypeDictDO(
             type_code=business_type.type_code,
             type_name=business_type.type_name,
             type_description=business_type.type_description,
@@ -394,7 +394,7 @@ class BusinessTypeDao:
     @staticmethod
     async def edit_business_type(db: AsyncSession, business_type: EditBusinessTypeModel) -> bool:
         """编辑业务类型"""
-        query = select(BusinessTypeDict).where(BusinessTypeDict.type_id == business_type.type_id)
+        query = select(BusinessTypeDictDO).where(BusinessTypeDictDO.type_id == business_type.type_id)
         result = await db.execute(query)
         existing_business_type = result.scalar_one_or_none()
         
@@ -415,7 +415,7 @@ class BusinessTypeDao:
     @staticmethod
     async def delete_business_type(db: AsyncSession, type_id: int) -> bool:
         """删除业务类型"""
-        query = select(BusinessTypeDict).where(BusinessTypeDict.type_id == type_id)
+        query = select(BusinessTypeDictDO).where(BusinessTypeDictDO.type_id == type_id)
         result = await db.execute(query)
         business_type = result.scalar_one_or_none()
         
@@ -427,26 +427,26 @@ class BusinessTypeDao:
         return True
     
     @staticmethod
-    async def get_all_business_types(db: AsyncSession) -> List[BusinessTypeDict]:
+    async def get_all_business_types(db: AsyncSession) -> List[BusinessTypeDictDO]:
         """获取所有启用的业务类型"""
-        query = select(BusinessTypeDict).where(
-            BusinessTypeDict.is_active == 1
-        ).order_by(BusinessTypeDict.sort_order.asc())
+        query = select(BusinessTypeDictDO).where(
+            BusinessTypeDictDO.is_active == 1
+        ).order_by(BusinessTypeDictDO.sort_order.asc())
         
         result = await db.execute(query)
         return result.scalars().all()
     
     @staticmethod
-    async def get_business_type_detail(db: AsyncSession, type_id: int) -> Optional[BusinessTypeDict]:
+    async def get_business_type_detail(db: AsyncSession, type_id: int) -> Optional[BusinessTypeDictDO]:
         """获取业务类型详情"""
         return await BusinessTypeDao.get_business_type_by_id(db, type_id)
     
     @staticmethod
     async def check_business_type_exists(db: AsyncSession, type_code: str, exclude_id: Optional[int] = None) -> bool:
         """检查业务类型编码是否存在"""
-        query = select(BusinessTypeDict).where(BusinessTypeDict.type_code == type_code)
+        query = select(BusinessTypeDictDO).where(BusinessTypeDictDO.type_code == type_code)
         if exclude_id:
-            query = query.where(BusinessTypeDict.type_id != exclude_id)
+            query = query.where(BusinessTypeDictDO.type_id != exclude_id)
         
         result = await db.execute(query)
         return result.scalar_one_or_none() is not None
@@ -455,7 +455,7 @@ class BusinessTypeDao:
     async def delete_business_type(db: AsyncSession, type_ids: List[int]) -> bool:
         """批量删除业务类型"""
         try:
-            query = select(BusinessTypeDict).where(BusinessTypeDict.type_id.in_(type_ids))
+            query = select(BusinessTypeDictDO).where(BusinessTypeDictDO.type_id.in_(type_ids))
             result = await db.execute(query)
             business_types = result.scalars().all()
             
@@ -471,9 +471,9 @@ class BusinessTypeDao:
     @staticmethod
     async def get_business_type_options(db: AsyncSession) -> List[Dict[str, Any]]:
         """获取业务类型选项"""
-        query = select(BusinessTypeDict).where(
-            BusinessTypeDict.is_active == 1
-        ).order_by(BusinessTypeDict.sort_order.asc())
+        query = select(BusinessTypeDictDO).where(
+            BusinessTypeDictDO.is_active == 1
+        ).order_by(BusinessTypeDictDO.sort_order.asc())
         
         result = await db.execute(query)
         business_types = result.scalars().all()
@@ -496,26 +496,26 @@ class HardwareTypeDao:
         db: AsyncSession,
         query_object: HardwareTypeQueryModel,
         is_page: bool = False
-    ) -> Tuple[List[HardwareTypeDict], int]:
+    ) -> Tuple[List[HardwareTypeDictDO], int]:
         """获取硬件类型列表"""
         conditions = []
         
         if query_object.type_code:
-            conditions.append(HardwareTypeDict.type_code.like(f'%{query_object.type_code}%'))
+            conditions.append(HardwareTypeDictDO.type_code.like(f'%{query_object.type_code}%'))
         if query_object.type_name:
-            conditions.append(HardwareTypeDict.type_name.like(f'%{query_object.type_name}%'))
+            conditions.append(HardwareTypeDictDO.type_name.like(f'%{query_object.type_name}%'))
         if query_object.category:
-            conditions.append(HardwareTypeDict.category.like(f'%{query_object.category}%'))
+            conditions.append(HardwareTypeDictDO.category.like(f'%{query_object.category}%'))
         if query_object.is_active is not None:
-            conditions.append(HardwareTypeDict.is_active == query_object.is_active)
+            conditions.append(HardwareTypeDictDO.is_active == query_object.is_active)
         
-        query = select(HardwareTypeDict)
+        query = select(HardwareTypeDictDO)
         if conditions:
             query = query.where(and_(*conditions))
         
-        query = query.order_by(HardwareTypeDict.sort_order.asc(), HardwareTypeDict.create_time.desc())
+        query = query.order_by(HardwareTypeDictDO.sort_order.asc(), HardwareTypeDictDO.create_time.desc())
         
-        count_query = select(func.count(HardwareTypeDict.type_id))
+        count_query = select(func.count(HardwareTypeDictDO.type_id))
         if conditions:
             count_query = count_query.where(and_(*conditions))
         
@@ -532,23 +532,23 @@ class HardwareTypeDao:
         return hardware_types, total
     
     @staticmethod
-    async def get_hardware_type_by_id(db: AsyncSession, type_id: int) -> Optional[HardwareTypeDict]:
+    async def get_hardware_type_by_id(db: AsyncSession, type_id: int) -> Optional[HardwareTypeDictDO]:
         """根据ID获取硬件类型"""
-        query = select(HardwareTypeDict).where(HardwareTypeDict.type_id == type_id)
+        query = select(HardwareTypeDictDO).where(HardwareTypeDictDO.type_id == type_id)
         result = await db.execute(query)
         return result.scalar_one_or_none()
     
     @staticmethod
-    async def get_hardware_type_by_code(db: AsyncSession, type_code: str) -> Optional[HardwareTypeDict]:
+    async def get_hardware_type_by_code(db: AsyncSession, type_code: str) -> Optional[HardwareTypeDictDO]:
         """根据编码获取硬件类型"""
-        query = select(HardwareTypeDict).where(HardwareTypeDict.type_code == type_code)
+        query = select(HardwareTypeDictDO).where(HardwareTypeDictDO.type_code == type_code)
         result = await db.execute(query)
         return result.scalar_one_or_none()
     
     @staticmethod
-    async def add_hardware_type(db: AsyncSession, hardware_type: AddHardwareTypeModel) -> HardwareTypeDict:
+    async def add_hardware_type(db: AsyncSession, hardware_type: AddHardwareTypeModel) -> HardwareTypeDictDO:
         """新增硬件类型"""
-        new_hardware_type = HardwareTypeDict(
+        new_hardware_type = HardwareTypeDictDO(
             type_code=hardware_type.type_code,
             type_name=hardware_type.type_name,
             type_description=hardware_type.type_description,
@@ -567,7 +567,7 @@ class HardwareTypeDao:
     @staticmethod
     async def edit_hardware_type(db: AsyncSession, hardware_type: EditHardwareTypeModel) -> bool:
         """编辑硬件类型"""
-        query = select(HardwareTypeDict).where(HardwareTypeDict.type_id == hardware_type.type_id)
+        query = select(HardwareTypeDictDO).where(HardwareTypeDictDO.type_id == hardware_type.type_id)
         result = await db.execute(query)
         existing_hardware_type = result.scalar_one_or_none()
         
@@ -589,7 +589,7 @@ class HardwareTypeDao:
     @staticmethod
     async def delete_hardware_type(db: AsyncSession, type_id: int) -> bool:
         """删除硬件类型"""
-        query = select(HardwareTypeDict).where(HardwareTypeDict.type_id == type_id)
+        query = select(HardwareTypeDictDO).where(HardwareTypeDictDO.type_id == type_id)
         result = await db.execute(query)
         hardware_type = result.scalar_one_or_none()
         
@@ -601,11 +601,11 @@ class HardwareTypeDao:
         return True
     
     @staticmethod
-    async def get_all_hardware_types(db: AsyncSession) -> List[HardwareTypeDict]:
+    async def get_all_hardware_types(db: AsyncSession) -> List[HardwareTypeDictDO]:
         """获取所有启用的硬件类型"""
-        query = select(HardwareTypeDict).where(
-            HardwareTypeDict.is_active == 1
-        ).order_by(HardwareTypeDict.sort_order.asc())
+        query = select(HardwareTypeDictDO).where(
+            HardwareTypeDictDO.is_active == 1
+        ).order_by(HardwareTypeDictDO.sort_order.asc())
         
         result = await db.execute(query)
         return result.scalars().all()
@@ -613,10 +613,10 @@ class HardwareTypeDao:
     @staticmethod
     async def get_hardware_categories(db: AsyncSession) -> List[str]:
         """获取所有硬件分类"""
-        query = select(HardwareTypeDict.category).distinct().where(
+        query = select(HardwareTypeDictDO.category).distinct().where(
             and_(
-                HardwareTypeDict.category.is_not(None),
-                HardwareTypeDict.is_active == 1
+                HardwareTypeDictDO.category.is_not(None),
+                HardwareTypeDictDO.is_active == 1
             )
         )
         
@@ -625,16 +625,16 @@ class HardwareTypeDao:
         return [cat for cat in categories if cat]
     
     @staticmethod
-    async def get_hardware_type_detail(db: AsyncSession, type_id: int) -> Optional[HardwareTypeDict]:
+    async def get_hardware_type_detail(db: AsyncSession, type_id: int) -> Optional[HardwareTypeDictDO]:
         """获取硬件类型详情"""
         return await HardwareTypeDao.get_hardware_type_by_id(db, type_id)
     
     @staticmethod
     async def check_hardware_type_exists(db: AsyncSession, type_code: str, exclude_id: Optional[int] = None) -> bool:
         """检查硬件类型编码是否存在"""
-        query = select(HardwareTypeDict).where(HardwareTypeDict.type_code == type_code)
+        query = select(HardwareTypeDictDO).where(HardwareTypeDictDO.type_code == type_code)
         if exclude_id:
-            query = query.where(HardwareTypeDict.type_id != exclude_id)
+            query = query.where(HardwareTypeDictDO.type_id != exclude_id)
         
         result = await db.execute(query)
         return result.scalar_one_or_none() is not None
@@ -643,7 +643,7 @@ class HardwareTypeDao:
     async def delete_hardware_type(db: AsyncSession, type_ids: List[int]) -> bool:
         """批量删除硬件类型"""
         try:
-            query = select(HardwareTypeDict).where(HardwareTypeDict.type_id.in_(type_ids))
+            query = select(HardwareTypeDictDO).where(HardwareTypeDictDO.type_id.in_(type_ids))
             result = await db.execute(query)
             hardware_types = result.scalars().all()
             
@@ -659,9 +659,9 @@ class HardwareTypeDao:
     @staticmethod
     async def get_hardware_type_options(db: AsyncSession) -> List[Dict[str, Any]]:
         """获取硬件类型选项"""
-        query = select(HardwareTypeDict).where(
-            HardwareTypeDict.is_active == 1
-        ).order_by(HardwareTypeDict.sort_order.asc())
+        query = select(HardwareTypeDictDO).where(
+            HardwareTypeDictDO.is_active == 1
+        ).order_by(HardwareTypeDictDO.sort_order.asc())
         
         result = await db.execute(query)
         hardware_types = result.scalars().all()
@@ -690,32 +690,32 @@ class UrgencyRuleDao:
         conditions = []
         
         if query_object.business_type:
-            conditions.append(BusinessHardwareUrgencyRules.business_type.like(f'%{query_object.business_type}%'))
+            conditions.append(BusinessHardwareUrgencyRulesDO.business_type.like(f'%{query_object.business_type}%'))
         if query_object.hardware_type:
-            conditions.append(BusinessHardwareUrgencyRules.hardware_type.like(f'%{query_object.hardware_type}%'))
+            conditions.append(BusinessHardwareUrgencyRulesDO.hardware_type.like(f'%{query_object.hardware_type}%'))
         if query_object.urgency_level:
-            conditions.append(BusinessHardwareUrgencyRules.urgency_level == query_object.urgency_level)
+            conditions.append(BusinessHardwareUrgencyRulesDO.urgency_level == query_object.urgency_level)
         if query_object.is_active is not None:
-            conditions.append(BusinessHardwareUrgencyRules.is_active == query_object.is_active)
+            conditions.append(BusinessHardwareUrgencyRulesDO.is_active == query_object.is_active)
         
         query = select(
-            BusinessHardwareUrgencyRules,
-            BusinessTypeDict.type_name.label('business_type_name'),
-            HardwareTypeDict.type_name.label('hardware_type_name')
+            BusinessHardwareUrgencyRulesDO,
+            BusinessTypeDictDO.type_name.label('business_type_name'),
+            HardwareTypeDictDO.type_name.label('hardware_type_name')
         ).outerjoin(
-            BusinessTypeDict,
-            BusinessHardwareUrgencyRules.business_type == BusinessTypeDict.type_code
+            BusinessTypeDictDO,
+            BusinessHardwareUrgencyRulesDO.business_type == BusinessTypeDictDO.type_code
         ).outerjoin(
-            HardwareTypeDict,
-            BusinessHardwareUrgencyRules.hardware_type == HardwareTypeDict.type_code
+            HardwareTypeDictDO,
+            BusinessHardwareUrgencyRulesDO.hardware_type == HardwareTypeDictDO.type_code
         )
         
         if conditions:
             query = query.where(and_(*conditions))
         
-        query = query.order_by(BusinessHardwareUrgencyRules.create_time.desc())
+        query = query.order_by(BusinessHardwareUrgencyRulesDO.create_time.desc())
         
-        count_query = select(func.count(BusinessHardwareUrgencyRules.rule_id))
+        count_query = select(func.count(BusinessHardwareUrgencyRulesDO.rule_id))
         if conditions:
             count_query = count_query.where(and_(*conditions))
         
@@ -731,7 +731,7 @@ class UrgencyRuleDao:
         
         rules = []
         for row in rows:
-            rule = row[0]  # BusinessHardwareUrgencyRules 对象
+            rule = row[0]  # BusinessHardwareUrgencyRulesDO 对象
             business_type_name = row[1]  # business_type_name
             hardware_type_name = row[2]  # hardware_type_name
             
@@ -754,9 +754,9 @@ class UrgencyRuleDao:
         return rules, total
     
     @staticmethod
-    async def get_urgency_rule_by_id(db: AsyncSession, rule_id: int) -> Optional[BusinessHardwareUrgencyRules]:
+    async def get_urgency_rule_by_id(db: AsyncSession, rule_id: int) -> Optional[BusinessHardwareUrgencyRulesDO]:
         """根据ID获取紧急度规则"""
-        query = select(BusinessHardwareUrgencyRules).where(BusinessHardwareUrgencyRules.rule_id == rule_id)
+        query = select(BusinessHardwareUrgencyRulesDO).where(BusinessHardwareUrgencyRulesDO.rule_id == rule_id)
         result = await db.execute(query)
         return result.scalar_one_or_none()
     
@@ -765,22 +765,22 @@ class UrgencyRuleDao:
         db: AsyncSession, 
         business_type: str, 
         hardware_type: str
-    ) -> Optional[BusinessHardwareUrgencyRules]:
+    ) -> Optional[BusinessHardwareUrgencyRulesDO]:
         """根据业务类型和硬件类型获取规则"""
-        query = select(BusinessHardwareUrgencyRules).where(
+        query = select(BusinessHardwareUrgencyRulesDO).where(
             and_(
-                BusinessHardwareUrgencyRules.business_type == business_type,
-                BusinessHardwareUrgencyRules.hardware_type == hardware_type,
-                BusinessHardwareUrgencyRules.is_active == 1
+                BusinessHardwareUrgencyRulesDO.business_type == business_type,
+                BusinessHardwareUrgencyRulesDO.hardware_type == hardware_type,
+                BusinessHardwareUrgencyRulesDO.is_active == 1
             )
         )
         result = await db.execute(query)
         return result.scalar_one_or_none()
     
     @staticmethod
-    async def add_urgency_rule(db: AsyncSession, rule: AddUrgencyRuleModel) -> BusinessHardwareUrgencyRules:
+    async def add_urgency_rule(db: AsyncSession, rule: AddUrgencyRuleModel) -> BusinessHardwareUrgencyRulesDO:
         """新增紧急度规则"""
-        new_rule = BusinessHardwareUrgencyRules(
+        new_rule = BusinessHardwareUrgencyRulesDO(
             business_type=rule.business_type,
             hardware_type=rule.hardware_type,
             urgency_level=rule.urgency_level,
@@ -798,7 +798,7 @@ class UrgencyRuleDao:
     @staticmethod
     async def edit_urgency_rule(db: AsyncSession, rule: EditUrgencyRuleModel) -> bool:
         """编辑紧急度规则"""
-        query = select(BusinessHardwareUrgencyRules).where(BusinessHardwareUrgencyRules.rule_id == rule.rule_id)
+        query = select(BusinessHardwareUrgencyRulesDO).where(BusinessHardwareUrgencyRulesDO.rule_id == rule.rule_id)
         result = await db.execute(query)
         existing_rule = result.scalar_one_or_none()
         
@@ -819,7 +819,7 @@ class UrgencyRuleDao:
     @staticmethod
     async def delete_urgency_rule(db: AsyncSession, rule_id: int) -> bool:
         """删除紧急度规则"""
-        query = select(BusinessHardwareUrgencyRules).where(BusinessHardwareUrgencyRules.rule_id == rule_id)
+        query = select(BusinessHardwareUrgencyRulesDO).where(BusinessHardwareUrgencyRulesDO.rule_id == rule_id)
         result = await db.execute(query)
         rule = result.scalar_one_or_none()
         
@@ -831,21 +831,21 @@ class UrgencyRuleDao:
         return True
     
     @staticmethod
-    async def get_urgency_rule_detail(db: AsyncSession, rule_id: int) -> Optional[BusinessHardwareUrgencyRules]:
+    async def get_urgency_rule_detail(db: AsyncSession, rule_id: int) -> Optional[BusinessHardwareUrgencyRulesDO]:
         """获取紧急度规则详情"""
         return await UrgencyRuleDao.get_urgency_rule_by_id(db, rule_id)
     
     @staticmethod
     async def check_urgency_rule_exists(db: AsyncSession, business_type: str, hardware_type: str, exclude_id: Optional[int] = None) -> bool:
         """检查紧急度规则是否存在"""
-        query = select(BusinessHardwareUrgencyRules).where(
+        query = select(BusinessHardwareUrgencyRulesDO).where(
             and_(
-                BusinessHardwareUrgencyRules.business_type == business_type,
-                BusinessHardwareUrgencyRules.hardware_type == hardware_type
+                BusinessHardwareUrgencyRulesDO.business_type == business_type,
+                BusinessHardwareUrgencyRulesDO.hardware_type == hardware_type
             )
         )
         if exclude_id:
-            query = query.where(BusinessHardwareUrgencyRules.rule_id != exclude_id)
+            query = query.where(BusinessHardwareUrgencyRulesDO.rule_id != exclude_id)
         
         result = await db.execute(query)
         return result.scalar_one_or_none() is not None
@@ -854,7 +854,7 @@ class UrgencyRuleDao:
     async def delete_urgency_rules(db: AsyncSession, rule_ids: List[int]) -> bool:
         """批量删除紧急度规则"""
         try:
-            query = select(BusinessHardwareUrgencyRules).where(BusinessHardwareUrgencyRules.rule_id.in_(rule_ids))
+            query = select(BusinessHardwareUrgencyRulesDO).where(BusinessHardwareUrgencyRulesDO.rule_id.in_(rule_ids))
             result = await db.execute(query)
             rules = result.scalars().all()
             

@@ -208,10 +208,10 @@ async def batch_initialize_tracking(
     批量初始化所有启用监控设备的日志跟踪记录
     """
     try:
-        from module_redfish.models import DeviceInfo
+        from module_redfish.entity.do.device_do import DeviceInfoDO
         
         # 获取所有启用监控的设备
-        devices = db.query(DeviceInfo).filter(DeviceInfo.monitor_enabled == 1).all()
+        devices = db.query(DeviceInfoDO).filter(DeviceInfoDO.monitor_enabled == 1).all()
         
         success_count = 0
         error_count = 0

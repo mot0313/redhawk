@@ -6,7 +6,9 @@ from typing import Optional, Dict, Any
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from module_redfish.models import DeviceInfo, BusinessHardwareUrgencyRules, AlertInfo
+from module_redfish.entity.do.device_do import DeviceInfoDO
+from module_redfish.entity.do.business_urgency_rule_do import BusinessHardwareUrgencyRulesDO  
+from module_redfish.entity.do.alert_do import AlertInfoDO
 from utils.log_util import logger
 
 
@@ -34,8 +36,8 @@ class AlertUrgencyService:
         try:
             # 1. 获取设备的业务类型
             device_result = await db.execute(
-                select(DeviceInfo.business_type, DeviceInfo.hostname)
-                .where(DeviceInfo.device_id == device_id)
+                            select(DeviceInfoDO.business_type, DeviceInfoDO.hostname)
+            .where(DeviceInfoDO.device_id == device_id)
             )
             device_info = device_result.first()
             
@@ -53,12 +55,12 @@ class AlertUrgencyService:
             
             # 2. 根据业务类型和硬件类型查询紧急度规则（支持大小写不敏感匹配）
             rule_result = await db.execute(
-                select(BusinessHardwareUrgencyRules)
+                select(BusinessHardwareUrgencyRulesDO)
                 .where(
                     and_(
-                        BusinessHardwareUrgencyRules.business_type == business_type,
-                        BusinessHardwareUrgencyRules.hardware_type == component_type.upper(),
-                        BusinessHardwareUrgencyRules.is_active == 1
+                        BusinessHardwareUrgencyRulesDO.business_type == business_type,
+                        BusinessHardwareUrgencyRulesDO.hardware_type == component_type.upper(),
+                        BusinessHardwareUrgencyRulesDO.is_active == 1
                     )
                 )
             )
@@ -115,8 +117,8 @@ class AlertUrgencyService:
         try:
             # 获取告警信息
             alert_result = await db.execute(
-                select(AlertInfo.device_id, AlertInfo.component_type)
-                .where(AlertInfo.alert_id == alert_id)
+                select(AlertInfoDO.device_id, AlertInfoDO.component_type)
+                .where(AlertInfoDO.alert_id == alert_id)
             )
             alert_info = alert_result.first()
             
@@ -168,15 +170,15 @@ class AlertUrgencyService:
             error_count = 0
             
             # 构建查询条件
-            query = select(AlertInfo.alert_id, AlertInfo.device_id, AlertInfo.component_type)
+            query = select(AlertInfoDO.alert_id, AlertInfoDO.device_id, AlertInfoDO.component_type)
             
             if alert_ids:
-                query = query.where(AlertInfo.alert_id.in_(alert_ids))
+                query = query.where(AlertInfoDO.alert_id.in_(alert_ids))
             elif device_ids:
-                query = query.where(AlertInfo.device_id.in_(device_ids))
+                query = query.where(AlertInfoDO.device_id.in_(device_ids))
             else:
                 # 如果都没指定，更新所有活跃告警
-                query = query.where(AlertInfo.alert_status == 'active')
+                query = query.where(AlertInfoDO.alert_status == 'active')
             
             result = await db.execute(query)
             alerts = result.fetchall()
@@ -242,11 +244,11 @@ class AlertUrgencyService:
         try:
             # 获取设备所有活跃告警
             alerts_result = await db.execute(
-                select(AlertInfo.alert_id, AlertInfo.component_type)
+                select(AlertInfoDO.alert_id, AlertInfoDO.component_type)
                 .where(
                     and_(
-                        AlertInfo.device_id == device_id,
-                        AlertInfo.alert_status == 'active'
+                        AlertInfoDO.device_id == device_id,
+                        AlertInfoDO.alert_status == 'active'
                     )
                 )
             )

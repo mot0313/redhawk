@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from module_redfish.dao.device_dao import DeviceDao
+from module_redfish.entity.do.device_do import DeviceInfoDO
 from module_redfish.entity.vo.device_vo import (
     DevicePageQueryModel, AddDeviceModel, EditDeviceModel, DeleteDeviceModel,
     DeviceDetailModel, DeviceHealthModel, DeviceTestConnectionModel, DeviceConnectionResult,
@@ -1051,9 +1052,9 @@ class DeviceService:
         from sqlalchemy import select
         
         if device_ids:
-            devices_query = select(DeviceInfo).where(DeviceInfo.device_id.in_(device_ids))
+            devices_query = select(DeviceInfoDO).where(DeviceInfoDO.device_id.in_(device_ids))
         else:
-            devices_query = select(DeviceInfo).where(DeviceInfo.business_ip.isnot(None))
+            devices_query = select(DeviceInfoDO).where(DeviceInfoDO.business_ip.isnot(None))
         
         result = await db.execute(devices_query)
         devices = result.scalars().all()

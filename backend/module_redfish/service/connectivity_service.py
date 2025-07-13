@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from module_redfish.models import DeviceInfo
+from module_redfish.entity.do.device_do import DeviceInfoDO
 from module_redfish.dao.device_dao import DeviceDao
 from utils.log_util import logger
 
@@ -132,12 +132,12 @@ class ConnectivityService:
         """
         # 查询设备
         if device_ids:
-            query = select(DeviceInfo).where(
-                DeviceInfo.device_id.in_(device_ids),
-                DeviceInfo.business_ip.isnot(None)
-            )
+                    query = select(DeviceInfoDO).where(
+            DeviceInfoDO.device_id.in_(device_ids),
+            DeviceInfoDO.business_ip.isnot(None)
+        )
         else:
-            query = select(DeviceInfo).where(DeviceInfo.business_ip.isnot(None))
+            query = select(DeviceInfoDO).where(DeviceInfoDO.business_ip.isnot(None))
         
         result = await db.execute(query)
         devices = result.scalars().all()

@@ -5,7 +5,7 @@ from sqlalchemy import and_, or_, func, desc, asc, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime, timedelta, date
-from module_redfish.models import DutySchedule, DutyPerson
+from module_redfish.entity.do import DutyScheduleDO, DutyPersonDO
 from module_redfish.entity.vo.duty_vo import DutySchedulePageQueryModel, DutyPersonPageQueryModel
 from utils.page_util import PageUtil
 
@@ -19,7 +19,7 @@ class DutyDao:
         db: AsyncSession,
         query_object: DutyPersonPageQueryModel,
         is_page: bool = False
-    ) -> Tuple[List[DutyPerson], int]:
+    ) -> Tuple[List[DutyPersonDO], int]:
         """
         获取值班人员列表
         
@@ -29,41 +29,41 @@ class DutyDao:
             is_page: 是否分页
             
         Returns:
-            Tuple[List[DutyPerson], int]: 值班人员列表和总数
+            Tuple[List[DutyPersonDO], int]: 值班人员列表和总数
         """
-        query = select(DutyPerson)
+        query = select(DutyPersonDO)
         
         # 构建查询条件
         conditions = []
         
         if query_object.person_name:
-            conditions.append(DutyPerson.person_name.like(f'%{query_object.person_name}%'))
+            conditions.append(DutyPersonDO.person_name.like(f'%{query_object.person_name}%'))
         
         if query_object.department:
-            conditions.append(DutyPerson.department.like(f'%{query_object.department}%'))
+            conditions.append(DutyPersonDO.department.like(f'%{query_object.department}%'))
         
         if query_object.position:
-            conditions.append(DutyPerson.position.like(f'%{query_object.position}%'))
+            conditions.append(DutyPersonDO.position.like(f'%{query_object.position}%'))
         
         if query_object.phone:
-            conditions.append(DutyPerson.phone.like(f'%{query_object.phone}%'))
+            conditions.append(DutyPersonDO.phone.like(f'%{query_object.phone}%'))
         
         if query_object.email:
-            conditions.append(DutyPerson.email.like(f'%{query_object.email}%'))
+            conditions.append(DutyPersonDO.email.like(f'%{query_object.email}%'))
         
         if query_object.status:
-            conditions.append(DutyPerson.status == query_object.status)
+            conditions.append(DutyPersonDO.status == query_object.status)
         
         if conditions:
             query = query.where(and_(*conditions))
         
         # 按创建时间倒序排列
-        query = query.order_by(desc(DutyPerson.create_time))
+        query = query.order_by(desc(DutyPersonDO.create_time))
         
         # 分页
         if is_page:
             # 获取总数
-            count_query = select(func.count(DutyPerson.person_id))
+            count_query = select(func.count(DutyPersonDO.person_id))
             if conditions:
                 count_query = count_query.where(and_(*conditions))
             total_count = await db.scalar(count_query)
@@ -80,7 +80,7 @@ class DutyDao:
             return person_list, len(person_list)
     
     @classmethod
-    async def get_duty_person_by_id(cls, db: AsyncSession, person_id: int) -> Optional[DutyPerson]:
+    async def get_duty_person_by_id(cls, db: AsyncSession, person_id: int) -> Optional[DutyPersonDO]:
         """
         根据ID获取值班人员信息
         
@@ -89,15 +89,15 @@ class DutyDao:
             person_id: 人员ID
             
         Returns:
-            Optional[DutyPerson]: 值班人员信息
+            Optional[DutyPersonDO]: 值班人员信息
         """
         result = await db.execute(
-            select(DutyPerson).where(DutyPerson.person_id == person_id)
+            select(DutyPersonDO).where(DutyPersonDO.person_id == person_id)
         )
         return result.scalar_one_or_none()
     
     @classmethod
-    async def get_duty_person_by_name(cls, db: AsyncSession, person_name: str) -> Optional[DutyPerson]:
+    async def get_duty_person_by_name(cls, db: AsyncSession, person_name: str) -> Optional[DutyPersonDO]:
         """
         根据姓名获取值班人员信息
         
@@ -106,15 +106,15 @@ class DutyDao:
             person_name: 人员姓名
             
         Returns:
-            Optional[DutyPerson]: 值班人员信息
+            Optional[DutyPersonDO]: 值班人员信息
         """
         result = await db.execute(
-            select(DutyPerson).where(DutyPerson.person_name == person_name)
+            select(DutyPersonDO).where(DutyPersonDO.person_name == person_name)
         )
         return result.scalar_one_or_none()
     
     @classmethod
-    async def add_duty_person(cls, db: AsyncSession, person_data: dict) -> DutyPerson:
+    async def add_duty_person(cls, db: AsyncSession, person_data: dict) -> DutyPersonDO:
         """
         添加值班人员
         
@@ -123,9 +123,9 @@ class DutyDao:
             person_data: 人员数据
             
         Returns:
-            DutyPerson: 新增的值班人员
+            DutyPersonDO: 新增的值班人员
         """
-        new_person = DutyPerson(**person_data)
+        new_person = DutyPersonDO(**person_data)
         db.add(new_person)
         await db.commit()
         await db.refresh(new_person)
@@ -145,7 +145,7 @@ class DutyDao:
         """
         person_id = person_data.pop('person_id')
         await db.execute(
-            update(DutyPerson).where(DutyPerson.person_id == person_id).values(**person_data)
+            update(DutyPersonDO).where(DutyPersonDO.person_id == person_id).values(**person_data)
         )
         await db.commit()
         return True
@@ -163,7 +163,7 @@ class DutyDao:
             bool: 是否成功
         """
         await db.execute(
-            delete(DutyPerson).where(DutyPerson.person_id.in_(person_ids))
+            delete(DutyPersonDO).where(DutyPersonDO.person_id.in_(person_ids))
         )
         await db.commit()
         return True
@@ -174,7 +174,7 @@ class DutyDao:
         db: AsyncSession,
         query_object: DutySchedulePageQueryModel,
         is_page: bool = False
-    ) -> Tuple[List[DutySchedule], int]:
+    ) -> Tuple[List[DutyScheduleDO], int]:
         """
         获取值班排期列表
         
@@ -184,46 +184,46 @@ class DutyDao:
             is_page: 是否分页
             
         Returns:
-            Tuple[List[DutySchedule], int]: 值班排期列表和总数
+            Tuple[List[DutyScheduleDO], int]: 值班排期列表和总数
         """
         # 关联值班人员表查询
-        query = select(DutySchedule).join(DutyPerson, DutySchedule.person_id == DutyPerson.person_id)
+        query = select(DutyScheduleDO).join(DutyPersonDO, DutyScheduleDO.person_id == DutyPersonDO.person_id)
         
         # 构建查询条件
         conditions = []
         
         if query_object.person_id:
-            conditions.append(DutySchedule.person_id == query_object.person_id)
+            conditions.append(DutyScheduleDO.person_id == query_object.person_id)
         
         if query_object.person_name:
-            conditions.append(DutyPerson.person_name.like(f'%{query_object.person_name}%'))
+            conditions.append(DutyPersonDO.person_name.like(f'%{query_object.person_name}%'))
         
         if query_object.duty_type:
-            conditions.append(DutySchedule.duty_type == query_object.duty_type)
+            conditions.append(DutyScheduleDO.duty_type == query_object.duty_type)
         
         if query_object.shift_type:
-            conditions.append(DutySchedule.shift_type == query_object.shift_type)
+            conditions.append(DutyScheduleDO.shift_type == query_object.shift_type)
         
         if query_object.start_date:
-            conditions.append(DutySchedule.duty_date >= query_object.start_date)
+            conditions.append(DutyScheduleDO.duty_date >= query_object.start_date)
         
         if query_object.end_date:
-            conditions.append(DutySchedule.duty_date <= query_object.end_date)
+            conditions.append(DutyScheduleDO.duty_date <= query_object.end_date)
         
         if query_object.department:
-            conditions.append(DutyPerson.department == query_object.department)
+            conditions.append(DutyPersonDO.department == query_object.department)
         
         if conditions:
             query = query.where(and_(*conditions))
         
         # 按值班日期倒序排列
-        query = query.order_by(desc(DutySchedule.duty_date), asc(DutySchedule.shift_type))
+        query = query.order_by(desc(DutyScheduleDO.duty_date), asc(DutyScheduleDO.shift_type))
         
         # 分页
         if is_page:
             # 获取总数
-            count_query = select(func.count(DutySchedule.schedule_id)).select_from(
-                DutySchedule.__table__.join(DutyPerson.__table__, DutySchedule.person_id == DutyPerson.person_id)
+            count_query = select(func.count(DutyScheduleDO.schedule_id)).select_from(
+                DutyScheduleDO.__table__.join(DutyPersonDO.__table__, DutyScheduleDO.person_id == DutyPersonDO.person_id)
             )
             if conditions:
                 count_query = count_query.where(and_(*conditions))
@@ -241,7 +241,7 @@ class DutyDao:
             return schedule_list, len(schedule_list)
     
     @classmethod
-    async def get_duty_schedule_by_id(cls, db: AsyncSession, schedule_id: int) -> Optional[DutySchedule]:
+    async def get_duty_schedule_by_id(cls, db: AsyncSession, schedule_id: int) -> Optional[DutyScheduleDO]:
         """
         根据ID获取值班排期信息
         
@@ -250,10 +250,10 @@ class DutyDao:
             schedule_id: 排期ID
             
         Returns:
-            Optional[DutySchedule]: 值班排期信息
+            Optional[DutyScheduleDO]: 值班排期信息
         """
         result = await db.execute(
-            select(DutySchedule).where(DutySchedule.schedule_id == schedule_id)
+            select(DutyScheduleDO).where(DutyScheduleDO.schedule_id == schedule_id)
         )
         return result.scalar_one_or_none()
     
@@ -263,7 +263,7 @@ class DutyDao:
         db: AsyncSession,
         start_date: date,
         end_date: date
-    ) -> List[DutySchedule]:
+    ) -> List[DutyScheduleDO]:
         """
         根据日期范围获取值班排期
         
@@ -273,15 +273,15 @@ class DutyDao:
             end_date: 结束日期
             
         Returns:
-            List[DutySchedule]: 值班排期列表
+            List[DutyScheduleDO]: 值班排期列表
         """
         result = await db.execute(
-            select(DutySchedule).where(
+            select(DutyScheduleDO).where(
                 and_(
-                    DutySchedule.duty_date >= start_date,
-                    DutySchedule.duty_date <= end_date
+                    DutyScheduleDO.duty_date >= start_date,
+                    DutyScheduleDO.duty_date <= end_date
                 )
-            ).order_by(DutySchedule.duty_date, DutySchedule.shift_type)
+            ).order_by(DutyScheduleDO.duty_date, DutyScheduleDO.shift_type)
         )
         return result.scalars().all()
     
@@ -293,7 +293,7 @@ class DutyDao:
         duty_date: date,
         shift_type: str,
         exclude_schedule_id: Optional[int] = None
-    ) -> List[DutySchedule]:
+    ) -> List[DutyScheduleDO]:
         """
         检查值班排期冲突
         
@@ -305,24 +305,24 @@ class DutyDao:
             exclude_schedule_id: 排除的排期ID（用于编辑时）
             
         Returns:
-            List[DutySchedule]: 冲突的值班排期
+            List[DutyScheduleDO]: 冲突的值班排期
         """
         conditions = [
-            DutySchedule.person_id == person_id,
-            DutySchedule.duty_date == duty_date,
-            DutySchedule.shift_type == shift_type
+            DutyScheduleDO.person_id == person_id,
+            DutyScheduleDO.duty_date == duty_date,
+            DutyScheduleDO.shift_type == shift_type
         ]
         
         if exclude_schedule_id:
-            conditions.append(DutySchedule.schedule_id != exclude_schedule_id)
+            conditions.append(DutyScheduleDO.schedule_id != exclude_schedule_id)
         
         result = await db.execute(
-            select(DutySchedule).where(and_(*conditions))
+            select(DutyScheduleDO).where(and_(*conditions))
         )
         return result.scalars().all()
     
     @classmethod
-    async def add_duty_schedule(cls, db: AsyncSession, schedule_data: dict) -> DutySchedule:
+    async def add_duty_schedule(cls, db: AsyncSession, schedule_data: dict) -> DutyScheduleDO:
         """
         添加值班排期
         
@@ -331,9 +331,9 @@ class DutyDao:
             schedule_data: 排期数据
             
         Returns:
-            DutySchedule: 新增的值班排期
+            DutyScheduleDO: 新增的值班排期
         """
-        new_schedule = DutySchedule(**schedule_data)
+        new_schedule = DutyScheduleDO(**schedule_data)
         db.add(new_schedule)
         await db.commit()
         await db.refresh(new_schedule)
@@ -353,7 +353,7 @@ class DutyDao:
         """
         schedule_id = schedule_data.pop('schedule_id')
         await db.execute(
-            update(DutySchedule).where(DutySchedule.schedule_id == schedule_id).values(**schedule_data)
+            update(DutyScheduleDO).where(DutyScheduleDO.schedule_id == schedule_id).values(**schedule_data)
         )
         await db.commit()
         return True
@@ -371,7 +371,7 @@ class DutyDao:
             bool: 是否成功
         """
         await db.execute(
-            delete(DutySchedule).where(DutySchedule.schedule_id.in_(schedule_ids))
+            delete(DutyScheduleDO).where(DutyScheduleDO.schedule_id.in_(schedule_ids))
         )
         await db.commit()
         return True
@@ -398,13 +398,13 @@ class DutyDao:
             shift_type = "night"
         
         result = await db.execute(
-            select(DutySchedule, DutyPerson).join(
-                DutyPerson, DutySchedule.person_id == DutyPerson.person_id
+            select(DutyScheduleDO, DutyPersonDO).join(
+                DutyPersonDO, DutyScheduleDO.person_id == DutyPersonDO.person_id
             ).where(
                 and_(
-                    DutySchedule.duty_date == today,
-                    DutySchedule.duty_type == duty_type,
-                    DutySchedule.shift_type == shift_type
+                    DutyScheduleDO.duty_date == today,
+                    DutyScheduleDO.duty_type == duty_type,
+                    DutyScheduleDO.shift_type == shift_type
                 )
             )
         )
@@ -445,16 +445,16 @@ class DutyDao:
         
         # 总值班人员数
         total_persons_result = await db.execute(
-            select(func.count(DutyPerson.person_id)).where(DutyPerson.status == '1')
+            select(func.count(DutyPersonDO.person_id)).where(DutyPersonDO.status == '1')
         )
         total_persons = total_persons_result.scalar()
         
         # 已安排值班数
         scheduled_count_result = await db.execute(
-            select(func.count(DutySchedule.schedule_id)).where(
+            select(func.count(DutyScheduleDO.schedule_id)).where(
                 and_(
-                    DutySchedule.duty_date >= start_date,
-                    DutySchedule.duty_date <= end_date
+                    DutyScheduleDO.duty_date >= start_date,
+                    DutyScheduleDO.duty_date <= end_date
                 )
             )
         )
@@ -462,22 +462,22 @@ class DutyDao:
         
         # 按部门统计值班人员
         dept_stats_result = await db.execute(
-            select(DutyPerson.department, func.count(DutyPerson.person_id))
-            .where(DutyPerson.status == '1')
-            .group_by(DutyPerson.department)
+            select(DutyPersonDO.department, func.count(DutyPersonDO.person_id))
+            .where(DutyPersonDO.status == '1')
+            .group_by(DutyPersonDO.department)
         )
         dept_stats = {row[0]: row[1] for row in dept_stats_result.fetchall()}
         
         # 按值班类型统计
         duty_type_stats_result = await db.execute(
-            select(DutySchedule.duty_type, func.count(DutySchedule.schedule_id))
+            select(DutyScheduleDO.duty_type, func.count(DutyScheduleDO.schedule_id))
             .where(
                 and_(
-                    DutySchedule.duty_date >= start_date,
-                    DutySchedule.duty_date <= end_date
+                    DutyScheduleDO.duty_date >= start_date,
+                    DutyScheduleDO.duty_date <= end_date
                 )
             )
-            .group_by(DutySchedule.duty_type)
+            .group_by(DutyScheduleDO.duty_type)
         )
         duty_type_stats = {row[0]: row[1] for row in duty_type_stats_result.fetchall()}
         

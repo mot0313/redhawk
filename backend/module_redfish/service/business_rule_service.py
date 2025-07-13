@@ -299,13 +299,13 @@ class BusinessRuleService:
             List[Dict[str, Any]]: 业务类型列表
         """
         from sqlalchemy import select
-        from module_redfish.models import BusinessTypeDict
+        from module_redfish.entity.do.business_type_dict_do import BusinessTypeDictDO
         
         try:
             result = await db.execute(
-                select(BusinessTypeDict)
-                .where(BusinessTypeDict.is_active == 1)
-                .order_by(BusinessTypeDict.sort_order, BusinessTypeDict.type_code)
+                select(BusinessTypeDictDO)
+                .where(BusinessTypeDictDO.is_active == 1)
+                .order_by(BusinessTypeDictDO.sort_order, BusinessTypeDictDO.type_code)
             )
             business_types = result.scalars().all()
             
@@ -337,13 +337,13 @@ class BusinessRuleService:
             List[Dict[str, Any]]: 硬件类型列表
         """
         from sqlalchemy import select
-        from module_redfish.models import HardwareTypeDict
+        from module_redfish.entity.do.hardware_type_dict_do import HardwareTypeDictDO
         
         try:
             result = await db.execute(
-                select(HardwareTypeDict)
-                .where(HardwareTypeDict.is_active == 1)
-                .order_by(HardwareTypeDict.sort_order, HardwareTypeDict.type_code)
+                select(HardwareTypeDictDO)
+                .where(HardwareTypeDictDO.is_active == 1)
+                .order_by(HardwareTypeDictDO.sort_order, HardwareTypeDictDO.type_code)
             )
             hardware_types = result.scalars().all()
             

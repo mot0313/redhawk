@@ -15,7 +15,7 @@ import json
 
 from .device_monitor import DeviceMonitor
 from config.get_db import get_sync_db
-from .models import DeviceInfo, AlertInfo, RedfishAlertLog, BusinessHardwareUrgencyRules
+from .entity.do import DeviceInfoDO, AlertInfoDO, RedfishAlertLogDO, BusinessHardwareUrgencyRulesDO
 from .realtime_service import PushServiceManager
 
 # 导入统一的Celery配置
@@ -240,8 +240,8 @@ def monitor_all_devices() -> Dict[str, Any]:
         db = next(get_sync_db())
         
         # 查询所有启用监控的设备
-        devices = db.query(DeviceInfo).filter(
-            DeviceInfo.monitor_enabled == 1
+        devices = db.query(DeviceInfoDO).filter(
+            DeviceInfoDO.monitor_enabled == 1
         ).all()
         
         if not devices:
@@ -376,14 +376,14 @@ def cleanup_old_logs(days: int = 30) -> Dict[str, Any]:
         cutoff_time = datetime.now() - timedelta(days=days)
         
         # 删除旧的日志记录
-        deleted_logs = db.query(RedfishAlertLog).filter(
-            RedfishAlertLog.occurrence_time < cutoff_time
+        deleted_logs = db.query(RedfishAlertLogDO).filter(
+            RedfishAlertLogDO.occurrence_time < cutoff_time
         ).delete()
         
         # 删除已解决的旧告警记录
-        deleted_alerts = db.query(AlertInfo).filter(
-            AlertInfo.resolved_time < cutoff_time,
-            AlertInfo.alert_status.in_(['resolved', 'closed'])
+        deleted_alerts = db.query(AlertInfoDO).filter(
+            AlertInfoDO.resolved_time < cutoff_time,
+            AlertInfoDO.alert_status.in_(['resolved', 'closed'])
         ).delete()
         
         db.commit()
@@ -421,18 +421,18 @@ def save_monitoring_result(result: Dict[str, Any], device_info: Dict[str, Any]):
         
         # 1. 批量获取数据
         # 获取此设备所有现有 active 告警
-        active_alerts_query = db.query(AlertInfo).filter(
-            AlertInfo.device_id == device_id,
-            AlertInfo.alert_status == 'active'
+        active_alerts_query = db.query(AlertInfoDO).filter(
+            AlertInfoDO.device_id == device_id,
+            AlertInfoDO.alert_status == 'active'
         ).all()
         active_alerts_map = {(alert.component_type, alert.component_name): alert for alert in active_alerts_query}
         
         # 获取所有紧急度规则
-        rules_query = db.query(BusinessHardwareUrgencyRules).filter(BusinessHardwareUrgencyRules.is_active == 1).all()
+        rules_query = db.query(BusinessHardwareUrgencyRulesDO).filter(BusinessHardwareUrgencyRulesDO.is_active == 1).all()
         urgency_rules_map = {(rule.business_type, rule.hardware_type.lower()): rule.urgency_level for rule in rules_query}
 
         # 获取设备当前状态
-        device = db.query(DeviceInfo).filter(DeviceInfo.device_id == device_id).first()
+        device = db.query(DeviceInfoDO).filter(DeviceInfoDO.device_id == device_id).first()
         if not device:
             logger.error(f"Device with id {device_id} not found in database.")
             return
@@ -462,7 +462,7 @@ def save_monitoring_result(result: Dict[str, Any], device_info: Dict[str, Any]):
                     # 情况1: 新告警
                     urgency_level = urgency_rules_map.get((business_type, component_type), 'scheduled')
                     
-                    new_alert = AlertInfo(
+                    new_alert = AlertInfoDO(
                     device_id=device_id,
                     component_type=component_type,
                     component_name=component_name,
@@ -659,10 +659,10 @@ def determine_alert_type(db, business_type: str, hardware_type: str) -> str:
     """
     try:
         # 查询匹配的规则
-        rule = db.query(BusinessHardwareUrgencyRules).filter(
-            BusinessHardwareUrgencyRules.business_type == business_type,
-            BusinessHardwareUrgencyRules.hardware_type == hardware_type.upper(),
-            BusinessHardwareUrgencyRules.is_active == 1
+        rule = db.query(BusinessHardwareUrgencyRulesDO).filter(
+            BusinessHardwareUrgencyRulesDO.business_type == business_type,
+            BusinessHardwareUrgencyRulesDO.hardware_type == hardware_type.upper(),
+            BusinessHardwareUrgencyRulesDO.is_active == 1
         ).first()
         
         if rule:
@@ -697,7 +697,7 @@ def recalculate_urgency_for_device(device_id: int):
         logger.info(f"Starting urgency recalculation for device_id: {device_id}")
         
         # 1. 获取设备最新的业务类型
-        device = db.query(DeviceInfo).filter(DeviceInfo.device_id == device_id).first()
+        device = db.query(DeviceInfoDO).filter(DeviceInfoDO.device_id == device_id).first()
         if not device:
             logger.warning(f"Recalculation task skipped: Device with id {device_id} not found.")
             return
@@ -705,9 +705,9 @@ def recalculate_urgency_for_device(device_id: int):
         business_type = device.business_type
         
         # 2. 获取该设备所有活跃的告警
-        active_alerts = db.query(AlertInfo).filter(
-            AlertInfo.device_id == device_id,
-            AlertInfo.alert_status == 'active'
+        active_alerts = db.query(AlertInfoDO).filter(
+            AlertInfoDO.device_id == device_id,
+            AlertInfoDO.alert_status == 'active'
         ).all()
 
         if not active_alerts:
@@ -715,7 +715,7 @@ def recalculate_urgency_for_device(device_id: int):
             return
             
         # 3. 获取所有紧急度规则并存入map
-        rules_query = db.query(BusinessHardwareUrgencyRules).filter(BusinessHardwareUrgencyRules.is_active == 1).all()
+        rules_query = db.query(BusinessHardwareUrgencyRulesDO).filter(BusinessHardwareUrgencyRulesDO.is_active == 1).all()
         urgency_rules_map = {(rule.business_type, rule.hardware_type.lower()): rule.urgency_level for rule in rules_query}
         
         updated_count = 0
@@ -772,7 +772,7 @@ def recalculate_urgency_for_rule_change(business_type: str, hardware_type: str):
         logger.info(f"Starting urgency recalculation for rule change: business_type='{business_type}', hardware_type='{hardware_type}'")
         
         # 1. 查找所有匹配该业务类型的设备
-        devices = db.query(DeviceInfo.device_id).filter(DeviceInfo.business_type == business_type).all()
+        devices = db.query(DeviceInfoDO.device_id).filter(DeviceInfoDO.business_type == business_type).all()
         device_ids = [device.device_id for device in devices]
 
         if not device_ids:
@@ -780,14 +780,14 @@ def recalculate_urgency_for_rule_change(business_type: str, hardware_type: str):
             return
 
         # 2. 获取所有紧急度规则并存入map
-        rules_query = db.query(BusinessHardwareUrgencyRules).filter(BusinessHardwareUrgencyRules.is_active == 1).all()
+        rules_query = db.query(BusinessHardwareUrgencyRulesDO).filter(BusinessHardwareUrgencyRulesDO.is_active == 1).all()
         urgency_rules_map = {(rule.business_type, rule.hardware_type.lower()): rule.urgency_level for rule in rules_query}
 
         # 3. 查找所有匹配设备和硬件类型的活跃告警
-        alerts_to_update = db.query(AlertInfo).filter(
-            AlertInfo.device_id.in_(device_ids),
-            AlertInfo.component_type.ilike(hardware_type),
-            AlertInfo.alert_status == 'active'
+        alerts_to_update = db.query(AlertInfoDO).filter(
+            AlertInfoDO.device_id.in_(device_ids),
+            AlertInfoDO.component_type.ilike(hardware_type),
+            AlertInfoDO.alert_status == 'active'
         ).all()
 
         if not alerts_to_update:

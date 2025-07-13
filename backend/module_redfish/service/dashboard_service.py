@@ -408,14 +408,14 @@ class DashboardService:
             Dict[str, int]: 健康状态分布
         """
         from sqlalchemy import select, func
-        from module_redfish.models import DeviceInfo
+        from module_redfish.entity.do.device_do import DeviceInfoDO
         
         # 按健康状态分组统计
         result = await db.execute(
             select(
-                DeviceInfo.health_status,
-                func.count(DeviceInfo.device_id).label('count')
-            ).group_by(DeviceInfo.health_status)
+                DeviceInfoDO.health_status,
+                func.count(DeviceInfoDO.device_id).label('count')
+            ).group_by(DeviceInfoDO.health_status)
         )
         
         status_counts = {}
@@ -442,13 +442,13 @@ class DashboardService:
             int: 告警数量
         """
         from sqlalchemy import select, func, and_
-        from module_redfish.models import AlertInfo
+        from module_redfish.entity.do.alert_do import AlertInfoDO
         
         result = await db.execute(
-            select(func.count(AlertInfo.alert_id)).where(
+            select(func.count(AlertInfoDO.alert_id)).where(
                 and_(
-                    AlertInfo.alert_status == 'active',
-                    AlertInfo.urgency_level == urgency_level
+                    AlertInfoDO.alert_status == 'active',
+                    AlertInfoDO.urgency_level == urgency_level
                 )
             )
         )
