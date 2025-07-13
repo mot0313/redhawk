@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from loguru import logger
 from .redfish_client import RedfishClient, decrypt_password
+from .service.connectivity_service import ConnectivityService
 
 
 class DeviceMonitor:
@@ -27,7 +28,8 @@ class DeviceMonitor:
             "storage": "disk",
             "power": "power",
             "temperatures": "temperature",
-            "fans": "fan"
+            "fans": "fan",
+            "connectivity": "connectivity"
         }
     
     def _get_component_status(self, component_data: Dict[str, Any]) -> Tuple[str, str]:
@@ -117,6 +119,50 @@ class DeviceMonitor:
         """
         alerts = []
         all_components = []
+        
+        # 检查业务IP连通性
+        business_ip = device_info.get('business_ip')
+        if business_ip:
+            try:
+                connectivity_result = await ConnectivityService.check_device_business_ip_connectivity(
+                    db=None, business_ip=business_ip
+                )
+                
+                # 根据连通性结果生成组件状态
+                is_online = connectivity_result.get('online', False)
+                health_status = 'OK' if is_online else 'Critical'
+                
+                component_status = {
+                    "component_type": "connectivity",
+                    "component_name": "宕机",
+                    "health_status": self._normalize_health_status(health_status)
+                }
+                all_components.append(component_status)
+                
+                # 如果离线，生成告警
+                if not is_online:
+                    alert_entry = {
+                        "device_id": device_info['device_id'],
+                        "alert_source": "connectivity",
+                        "component_type": "connectivity",
+                        "component_name": "宕机",
+                        "health_status": self._normalize_health_status(health_status),
+                        "urgency_level": self._map_health_to_urgency_level(health_status),
+                        "alert_message": f"Device business IP {business_ip} is unreachable: {connectivity_result.get('error', 'Connection failed')}",
+                        "first_occurrence": datetime.now(),
+                        "raw_data": json.dumps(connectivity_result)
+                    }
+                    alerts.append(alert_entry)
+                    
+            except Exception as e:
+                logger.error(f"Error checking business IP connectivity for {business_ip}: {str(e)}")
+                # 连通性检查失败时，记录为未知状态
+                component_status = {
+                    "component_type": "connectivity",
+                    "component_name": "宕机",
+                    "health_status": "unknown"
+                }
+                all_components.append(component_status)
         
         # 分析系统整体状态
         system_info = status_data.get('system_info', {})
