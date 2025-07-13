@@ -26,7 +26,8 @@ class DashboardService:
     async def get_dashboard_overview_services(
         cls,
         db: AsyncSession,
-        query_model: DashboardQueryModel
+        query_model: DashboardQueryModel,
+        force_refresh: bool = False
     ) -> DashboardOverviewModel:
         """
         获取首页概览数据
@@ -34,6 +35,7 @@ class DashboardService:
         Args:
             db: 数据库会话
             query_model: 查询模型
+            force_refresh: 是否强制刷新，跳过缓存
             
         Returns:
             DashboardOverviewModel: 首页概览数据
@@ -48,8 +50,12 @@ class DashboardService:
         combined_warning_devices = health_distribution['warning'] + health_distribution['critical']
         
         # 获取基于业务IP的真实在线/离线设备统计
+        # 如果force_refresh为True，则不使用缓存；否则使用3分钟缓存
+        use_cache = not force_refresh
+        cache_ttl = 3 if not force_refresh else 0
+        
         connectivity_stats = await ConnectivityService.get_connectivity_statistics(
-            db, use_cache=True, cache_ttl_minutes=5
+            db, use_cache=use_cache, cache_ttl_minutes=cache_ttl
         )
         online_devices = connectivity_stats.get('online_devices', 0)
         offline_devices = connectivity_stats.get('offline_devices', 0)
@@ -348,7 +354,8 @@ class DashboardService:
     async def get_complete_dashboard_data_services(
         cls,
         db: AsyncSession,
-        query_model: DashboardQueryModel
+        query_model: DashboardQueryModel,
+        force_refresh: bool = False
     ) -> DashboardDataModel:
         """
         获取完整的首页数据
@@ -356,6 +363,7 @@ class DashboardService:
         Args:
             db: 数据库会话
             query_model: 查询模型
+            force_refresh: 是否强制刷新，跳过缓存
             
         Returns:
             DashboardDataModel: 完整的首页数据
@@ -368,7 +376,7 @@ class DashboardService:
             days = 90
         
         # 并行获取各种数据
-        overview = await cls.get_dashboard_overview_services(db, query_model)
+        overview = await cls.get_dashboard_overview_services(db, query_model, force_refresh)
         alert_trend = await cls.get_alert_trend_chart_services(db, days)
         device_health_chart = await cls.get_device_health_chart_services(db)
         realtime_alerts = await cls.get_realtime_alert_list_services(db, 10)

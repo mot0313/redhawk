@@ -41,22 +41,29 @@ class AlertService:
         alert_list, total = await AlertDao.get_alert_list(db, query_object, is_page)
         
         if is_page:
-            # 使用现有的分页方法创建分页响应
-            has_next = math.ceil(total / query_object.page_size) > query_object.page_num if total > 0 else False
-            from utils.common_util import CamelCaseUtil
-            return PageResponseModel(
-                rows=CamelCaseUtil.transform_result(alert_list),
-                pageNum=query_object.page_num,
-                pageSize=query_object.page_size,
-                total=total,
-                hasNext=has_next
+            # 使用AlertPageResponseModel创建分页响应
+            from module_redfish.entity.vo.alert_vo import AlertPageResponseModel
+            return AlertPageResponseModel.create(
+                alerts=alert_list,
+                page_num=query_object.page_num,
+                page_size=query_object.page_size,
+                total=total
             )
         else:
-            from utils.common_util import CamelCaseUtil
-            return CamelCaseUtil.transform_result(alert_list)
+            # 非分页模式，返回告警列表
+            from module_redfish.entity.vo.alert_vo import AlertResponseModel
+            alert_models = []
+            for alert in alert_list:
+                if hasattr(alert, '__dict__'):
+                    alert_dict = alert.__dict__.copy()
+                    alert_dict.pop('_sa_instance_state', None)
+                else:
+                    alert_dict = alert
+                alert_models.append(AlertResponseModel(**alert_dict))
+            return alert_models
     
     @classmethod
-    async def get_alert_detail_services(cls, db: AsyncSession, alert_id: int) -> ResponseUtil:
+    async def get_alert_detail_services(cls, db: AsyncSession, alert_id: int):
         """
         获取告警详情
         
@@ -65,22 +72,19 @@ class AlertService:
             alert_id: 告警ID
             
         Returns:
-            ResponseUtil: 响应结果
+            AlertDetailResponseModel: 响应结果
         """
+        from module_redfish.entity.vo.alert_vo import AlertDetailResponseModel
         alert = await AlertDao.get_alert_by_id(db, alert_id)
         if not alert:
-            return ResponseUtil.failure(msg="告警不存在")
+            return None
         
-        # 转换为驼峰命名
-        from utils.common_util import CamelCaseUtil
-        alert_camel = CamelCaseUtil.transform_result([alert])[0] if alert else alert
-        
-        return ResponseUtil.success(data=alert_camel)
+        return AlertDetailResponseModel.create(alert=alert)
     
     # 精简版移除手动解决和忽略告警功能，告警状态由监控系统自动管理
     
     @classmethod
-    async def get_alert_statistics_services(cls, db: AsyncSession, days: int = 7) -> AlertStatisticsModel:
+    async def get_alert_statistics_services(cls, db: AsyncSession, days: int = 7):
         """
         获取告警统计信息
         
@@ -89,18 +93,12 @@ class AlertService:
             days: 统计天数
             
         Returns:
-            AlertStatisticsModel: 统计信息
+            AlertStatsResponseModel: 统计信息
         """
+        from module_redfish.entity.vo.alert_vo import AlertStatsResponseModel
         stats = await AlertDao.get_alert_statistics(db, days)
         
-        return AlertStatisticsModel(
-            total_alerts=stats['total_alerts'],
-            urgent_alerts=stats['urgent_alerts'],
-            scheduled_alerts=stats['scheduled_alerts'],
-            active_alerts=stats['active_alerts'],
-            resolved_alerts=stats['resolved_alerts'],
-            ignored_alerts=stats['ignored_alerts']
-        )
+        return AlertStatsResponseModel.create(stats)
     
     @classmethod
     async def get_alert_trend_services(cls, db: AsyncSession, days: int = 7) -> List[AlertTrendModel]:
@@ -177,8 +175,7 @@ class AlertService:
                 component_name=alert['component_name'],
                 health_status=alert['health_status'],
                 alert_message="",  # 优化版DAO中没有alert_message字段
-                first_occurrence=alert['first_occurrence'],
-                occurrence_count=1  # 优化版DAO中没有occurrence_count字段，使用默认值
+                first_occurrence=alert['first_occurrence']
             )
             for alert in alerts
         ]
@@ -274,8 +271,7 @@ class AlertService:
                 'urgency_level': alert.urgency_level,
                 'alert_message': alert.alert_message,
                 'first_occurrence': alert.first_occurrence,
-                'last_occurrence': alert.last_occurrence,
-                'occurrence_count': alert.occurrence_count
+                'last_occurrence': alert.last_occurrence
             }
             for alert in alerts
         ]
@@ -506,7 +502,7 @@ class AlertService:
         db: AsyncSession,
         start_date: str,
         end_date: str
-    ) -> List[Dict[str, Any]]:
+    ):
         """
         获取日历视图的维修计划数据
         
@@ -516,38 +512,258 @@ class AlertService:
             end_date: 结束日期
             
         Returns:
-            List[Dict[str, Any]]: 维修计划列表
+            CalendarMaintenanceResponseModel: 维修计划列表
         """
         try:
+            from module_redfish.entity.vo.alert_vo import CalendarMaintenanceResponseModel
             # 获取指定时间范围内的维修计划
             maintenance_list = await AlertDao.get_calendar_maintenance(db, start_date, end_date)
             
-            # 转换为前端需要的格式
-            result = []
-            for maintenance in maintenance_list:
-                result.append({
-                    'alert_id': maintenance.alert_id,
-                    'hostname': maintenance.hostname,
-                    'business_ip': maintenance.business_ip,
-                    'component_type': maintenance.component_type,
-                    'component_name': maintenance.component_name,
-                    'urgency_level': maintenance.urgency_level,
-                    'health_status': maintenance.health_status,
-                    'alert_status': maintenance.alert_status,
-                    'alert_message': f"{maintenance.component_type} 组件健康状态异常",  # 生成默认告警消息
-                    'scheduled_maintenance_time': maintenance.scheduled_maintenance_time.isoformat() if maintenance.scheduled_maintenance_time else None,
-                    'maintenance_status': maintenance.maintenance_status,
-                    'maintenance_description': maintenance.maintenance_description,
-                    'maintenance_notes': maintenance.maintenance_notes,
-                    'first_occurrence': maintenance.first_occurrence.isoformat() if maintenance.first_occurrence else None,
-                    'last_occurrence': maintenance.last_occurrence.isoformat() if maintenance.last_occurrence else None,
-                    'occurrence_count': 1  # 由于AlertInfo表没有此字段，设为默认值
-                })
-            
-            # 应用字段名转换（下划线转驼峰）
-            from utils.common_util import CamelCaseUtil
-            return CamelCaseUtil.transform_result(result)
+            return CalendarMaintenanceResponseModel.create(maintenance_list)
             
         except Exception as e:
             logger.error(f"获取日历维修计划失败: {str(e)}")
             raise 
+
+    @classmethod
+    async def delete_alert_services(
+        cls,
+        db: AsyncSession,
+        alert_id: int,
+        delete_reason: Optional[str] = None
+    ):
+        """
+        删除告警服务
+        
+        Args:
+            db: 数据库会话
+            alert_id: 告警ID
+            delete_reason: 删除原因
+            
+        Returns:
+            AlertDeleteResponseModel: 删除结果
+        """
+        try:
+            from module_redfish.entity.vo.alert_vo import AlertDeleteResponseModel
+            
+            # 首先检查告警是否存在
+            existing_alert = await AlertDao.get_alert_by_id(db, alert_id)
+            if not existing_alert:
+                return AlertDeleteResponseModel.create_failure("告警不存在或已被删除")
+            
+            # 执行删除
+            success = await AlertDao.delete_alert(db, alert_id, delete_reason)
+            
+            if success:
+                logger.info(f"告警删除成功: alert_id={alert_id}, reason={delete_reason}")
+                return AlertDeleteResponseModel.create_success(1, "告警删除成功")
+            else:
+                return AlertDeleteResponseModel.create_failure("删除失败")
+                
+        except Exception as e:
+            logger.error(f"删除告警服务失败: {str(e)}")
+            return AlertDeleteResponseModel.create_failure("删除失败")
+    
+    @classmethod
+    async def batch_delete_alerts_services(
+        cls,
+        db: AsyncSession,
+        alert_ids: List[int],
+        delete_reason: Optional[str] = None
+    ):
+        """
+        批量删除告警服务
+        
+        Args:
+            db: 数据库会话
+            alert_ids: 告警ID列表
+            delete_reason: 删除原因
+            
+        Returns:
+            AlertDeleteResponseModel: 删除结果
+        """
+        try:
+            from module_redfish.entity.vo.alert_vo import AlertDeleteResponseModel
+            
+            if not alert_ids:
+                return AlertDeleteResponseModel.create_failure("请选择要删除的告警")
+            
+            # 执行批量删除
+            deleted_count = await AlertDao.batch_delete_alerts(db, alert_ids, delete_reason)
+            
+            if deleted_count > 0:
+                logger.info(f"批量删除告警成功: 删除了{deleted_count}个告警, reason={delete_reason}")
+                return AlertDeleteResponseModel.create_success(deleted_count, f"成功删除{deleted_count}个告警")
+            else:
+                return AlertDeleteResponseModel.create_failure("没有找到可删除的告警")
+                
+        except Exception as e:
+            logger.error(f"批量删除告警服务失败: {str(e)}")
+            return AlertDeleteResponseModel.create_failure("批量删除失败") 
+
+    @staticmethod
+    async def export_alert_list_services(alert_list: List):
+        """
+        导出告警信息服务
+        
+        Args:
+            alert_list: 告警信息列表
+            
+        Returns:
+            bytes: 告警信息对应excel的二进制数据
+        """
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, PatternFill, Font
+        from openpyxl.utils import get_column_letter
+        import io
+        
+        # 创建一个映射字典，将英文键映射到中文键
+        mapping_dict = {
+            'serialNo': '序号',
+            'hostname': '主机名',
+            'businessIp': '业务IP',
+            'componentType': '组件类型',
+            'componentName': '组件名称',
+            'urgencyLevel': '紧急程度',
+            'healthStatus': '健康状态',
+            'alertStatus': '告警状态',
+            'firstOccurrence': '首次发生时间',
+            'lastOccurrence': '最后发生时间',
+            'scheduledMaintenanceTime': '计划维修时间',
+            'maintenanceStatus': '维修状态',
+            'maintenanceDescription': '维修描述',
+            'maintenanceNotes': '维修备注',
+            'createTime': '创建时间',
+            'updateTime': '更新时间',
+        }
+
+        # 处理数据格式化
+        processed_data = []
+        for index, item in enumerate(alert_list, 1):
+            # 确保 item 是字典类型，如果是对象则转换为字典
+            if not isinstance(item, dict):
+                # 将AlertResponseModel对象转换为字典
+                if hasattr(item, 'model_dump'):
+                    # 使用Pydantic的model_dump方法，自动处理驼峰命名
+                    item = item.model_dump(by_alias=True)
+                elif hasattr(item, '__dict__'):
+                    item_dict = {}
+                    for key, value in item.__dict__.items():
+                        if not key.startswith('_'):  # 排除私有属性
+                            # 转换为驼峰命名
+                            from utils.common_util import CamelCaseUtil
+                            camel_key = CamelCaseUtil.snake_to_camel(key)
+                            item_dict[camel_key] = value
+                    item = item_dict
+                else:
+                    continue
+            
+            # 格式化紧急程度
+            urgency_level_map = {
+                'urgent': '紧急',
+                'scheduled': '择期'
+            }
+            urgency_level = item.get('urgencyLevel')
+            if urgency_level:
+                item['urgencyLevel'] = urgency_level_map.get(urgency_level, '未知')
+            else:
+                item['urgencyLevel'] = '未知'
+            
+            # 格式化健康状态
+            health_status_map = {
+                'OK': '正常',
+                'ok': '正常',
+                'Warning': '警告',
+                'warning': '警告',
+                'Critical': '警告',  # 简化分类：Critical合并到warning
+                'critical': '警告',
+                'Unknown': '未知',
+                'unknown': '未知'
+            }
+            health_status = item.get('healthStatus')
+            if health_status:
+                item['healthStatus'] = health_status_map.get(health_status, '警告')  # 默认为警告而不是未知
+            else:
+                item['healthStatus'] = '警告'
+            
+            # 格式化告警状态
+            alert_status_map = {
+                'active': '活跃',
+                'resolved': '已解决',
+                'ignored': '已忽略'
+            }
+            alert_status = item.get('alertStatus')
+            if alert_status:
+                item['alertStatus'] = alert_status_map.get(alert_status, '未知')
+            else:
+                item['alertStatus'] = '未知'
+            
+            # 格式化维修状态
+            maintenance_status_map = {
+                'none': '未安排',
+                'planned': '已计划',
+                'in_progress': '进行中',
+                'completed': '已完成',
+                'cancelled': '已取消'
+            }
+            maintenance_status = item.get('maintenanceStatus')
+            if maintenance_status:
+                item['maintenanceStatus'] = maintenance_status_map.get(maintenance_status, '未安排')
+            else:
+                item['maintenanceStatus'] = '未安排'
+            
+            # 格式化时间
+            time_fields = ['firstOccurrence', 'lastOccurrence', 'scheduledMaintenanceTime', 'createTime', 'updateTime']
+            for time_field in time_fields:
+                time_value = item.get(time_field)
+                if time_value:
+                    try:
+                        if isinstance(time_value, str):
+                            item[time_field] = time_value
+                        else:
+                            item[time_field] = time_value.strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        item[time_field] = ''
+                else:
+                    item[time_field] = ''
+            
+            # 添加序号
+            item['serialNo'] = index
+            processed_data.append(item)
+
+        # 使用openpyxl创建Excel文件，应用和模板一样的样式
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "告警列表"
+        
+        # 表头样式设置（与设备导出一致）
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(color='FFFFFF', bold=True)
+        
+        # 获取表头列表
+        headers = list(mapping_dict.values())
+        keys = list(mapping_dict.keys())
+        
+        # 写入表头
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            # 设置列宽
+            ws.column_dimensions[get_column_letter(col_num)].width = 15
+        
+        # 写入数据
+        for row_num, item in enumerate(processed_data, 2):
+            for col_num, key in enumerate(keys, 1):
+                cell = ws.cell(row=row_num, column=col_num)
+                cell.value = item.get(key, '')
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # 保存为字节数据
+        file_stream = io.BytesIO()
+        wb.save(file_stream)
+        file_stream.seek(0)
+        
+        return file_stream.getvalue() 

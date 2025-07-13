@@ -332,22 +332,11 @@ async def batch_update_alert_urgency(
 
 @businessRuleController.get("/business-types", summary="获取业务类型列表")
 async def get_business_type_list(
-    pageNum: int = Query(1, alias="pageNum", description="页码"),
-    pageSize: int = Query(10, alias="pageSize", description="每页大小"),
-    typeCode: str = Query(None, alias="typeCode", description="类型编码"),
-    typeName: str = Query(None, alias="typeName", description="类型名称"),
-    isActive: int = Query(None, alias="isActive", description="是否启用"),
+    query: BusinessTypeQueryModel = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     """获取业务类型分页列表"""
-    query_object = BusinessTypeQueryModel.as_query(
-        page_num=pageNum,
-        page_size=pageSize,
-        type_code=typeCode,
-        type_name=typeName,
-        is_active=isActive
-    )
-    return await BusinessRuleService.get_business_type_list_services(db, query_object, is_page=True)
+    return await BusinessRuleService.get_business_type_list_services(db, query, is_page=True)
 
 
 @businessRuleController.get("/business-types/all", summary="获取所有业务类型")
@@ -406,24 +395,11 @@ async def delete_business_type(
 
 @businessRuleController.get("/hardware-types", summary="获取硬件类型列表")
 async def get_hardware_type_list(
-    pageNum: int = Query(1, alias="pageNum", description="页码"),
-    pageSize: int = Query(10, alias="pageSize", description="每页大小"),
-    typeCode: str = Query(None, alias="typeCode", description="类型编码"),
-    typeName: str = Query(None, alias="typeName", description="类型名称"),
-    category: str = Query(None, alias="category", description="硬件分类"),
-    isActive: int = Query(None, alias="isActive", description="是否启用"),
+    query: HardwareTypeQueryModel = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     """获取硬件类型分页列表"""
-    query_object = HardwareTypeQueryModel.as_query(
-        page_num=pageNum,
-        page_size=pageSize,
-        type_code=typeCode,
-        type_name=typeName,
-        category=category,
-        is_active=isActive
-    )
-    return await BusinessRuleService.get_hardware_type_list_services(db, query_object, is_page=True)
+    return await BusinessRuleService.get_hardware_type_list_services(db, query, is_page=True)
 
 
 @businessRuleController.get("/hardware-types/all", summary="获取所有硬件类型")
@@ -488,24 +464,11 @@ async def delete_hardware_type(
 
 @businessRuleController.get("/urgency-rules", summary="获取紧急度规则列表")
 async def get_urgency_rule_list(
-    pageNum: int = Query(1, alias="pageNum", description="页码"),
-    pageSize: int = Query(10, alias="pageSize", description="每页大小"),
-    businessType: str = Query(None, alias="businessType", description="业务类型"),
-    hardwareType: str = Query(None, alias="hardwareType", description="硬件类型"),
-    urgencyLevel: str = Query(None, alias="urgencyLevel", description="紧急程度"),
-    isActive: int = Query(None, alias="isActive", description="是否启用"),
+    query: UrgencyRuleQueryModel = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     """获取紧急度规则分页列表"""
-    query_object = UrgencyRuleQueryModel.as_query(
-        page_num=pageNum,
-        page_size=pageSize,
-        business_type=businessType,
-        hardware_type=hardwareType,
-        urgency_level=urgencyLevel,
-        is_active=isActive
-    )
-    return await BusinessRuleService.get_urgency_rule_list_services(db, query_object, is_page=True)
+    return await BusinessRuleService.get_urgency_rule_list_services(db, query, is_page=True)
 
 
 @businessRuleController.get("/urgency-rules/all", summary="获取所有紧急度规则")

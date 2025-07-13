@@ -1,11 +1,14 @@
 import request from '@/utils/request'
 
 // 获取首页概览数据
-export function getDashboardOverview(timeRange = '7d') {
+export function getDashboardOverview(timeRange = '7d', forceRefresh = false) {
   return request({
     url: '/redfish/dashboard/overview',
     method: 'get',
-    params: { time_range: timeRange }
+    params: { 
+      time_range: timeRange,
+      forceRefresh: forceRefresh
+    }
   })
 }
 
@@ -62,22 +65,34 @@ export function getSystemHealthMetrics() {
 }
 
 // 获取完整的首页数据
-export function getCompleteDashboardData(timeRange = '7d') {
+export function getCompleteDashboardData(timeRange = '7d', forceRefresh = false) {
   return request({
     url: '/redfish/dashboard/complete',
     method: 'get',
-    params: { time_range: timeRange }
+    params: { 
+      time_range: timeRange,
+      forceRefresh: forceRefresh
+    }
   })
 }
 
 // 刷新首页数据
-export function refreshDashboardData(component = 'all', timeRange = '7d') {
+export function refreshDashboardData(component = 'all', timeRange = '7d', forceRefresh = false) {
   return request({
     url: '/redfish/dashboard/refresh',
     method: 'get',
     params: { 
       component,
-      time_range: timeRange 
+      time_range: timeRange,
+      forceRefresh: forceRefresh
     }
+  })
+}
+
+// 刷新设备状态缓存
+export function refreshDeviceStatus() {
+  return request({
+    url: '/redfish/connectivity/refresh-cache',
+    method: 'post'
   })
 } 

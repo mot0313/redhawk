@@ -954,6 +954,7 @@ function getList() {
   loading.value = true;
   listDevice(queryParams.value).then(response => {
     console.log('设备列表响应:', response);
+    // 使用 model_content 响应格式，数据直接在响应根级别
     if (response && response.rows) {
       deviceList.value = response.rows;
       total.value = response.total || 0;
@@ -1314,24 +1315,24 @@ function handleCheckConnectivity(row) {
   checkDeviceConnectivity(row.deviceId).then(response => {
     proxy.$modal.closeLoading()
 
-    // 更新列表中的连通性状态
-    updateSingleDeviceConnectivity(row.deviceId, response.data)
+    // 使用 model_content 响应格式，数据直接在响应根级别
+    updateSingleDeviceConnectivity(row.deviceId, response)
 
-    const status = response.data.online ? '在线' : '离线'
-    const pingTime = response.data.ping?.response_time || 'N/A'
+    const status = response.online ? '在线' : '离线'
+    const pingTime = response.checkDetails?.ping?.responseTime || 'N/A'
 
-    if (response.data.online) {
-      proxy.$modal.msgSuccess(`设备 ${row.hostname} (${response.data.business_ip}) 
+    if (response.online) {
+      proxy.$modal.msgSuccess(`设备 ${row.hostname} (${response.businessIp}) 
       
 连通性检测结果: ${status}
 Ping响应时间: ${pingTime}
-检测耗时: ${response.data.check_duration_ms?.toFixed(1)}ms`)
+检测耗时: ${response.checkDurationMs?.toFixed(1)}ms`)
     } else {
-      proxy.$modal.msgWarning(`设备 ${row.hostname} (${response.data.business_ip}) 
+      proxy.$modal.msgWarning(`设备 ${row.hostname} (${response.businessIp}) 
       
 连通性检测结果: ${status}
-错误信息: ${response.data.ping?.error || '无详细错误信息'}
-检测耗时: ${response.data.check_duration_ms?.toFixed(1)}ms`)
+错误信息: ${response.checkDetails?.ping?.error || '无详细错误信息'}
+检测耗时: ${response.checkDurationMs?.toFixed(1)}ms`)
     }
   }).catch(error => {
     proxy.$modal.closeLoading()
@@ -1360,10 +1361,11 @@ function handleBatchCheckConnectivity() {
   }).then(response => {
     proxy.$modal.closeLoading()
 
-    const result = response.data
-    const onlineCount = result.online_devices
-    const offlineCount = result.offline_devices
-    const totalTime = result.check_duration_ms?.toFixed(1)
+    // 使用 model_content 响应格式，数据直接在响应根级别
+    const result = response
+    const onlineCount = result.onlineDevices
+    const offlineCount = result.offlineDevices
+    const totalTime = result.checkDurationMs?.toFixed(1)
 
     // 将连通性检测结果更新到设备列表中
     updateDeviceListConnectivity(result)
@@ -1387,19 +1389,20 @@ function handleGetConnectivityStats() {
   getConnectivityStatistics({ useCache: false }).then(response => {
     proxy.$modal.closeLoading()
 
-    const result = response.data
-    const onlineCount = result.online_devices || 0
-    const offlineCount = result.offline_devices || 0
-    const totalDevices = result.total_devices || 0
+    // 当使用model_content时，数据在响应的根级别，而不是data字段
+    const result = response
+    const onlineCount = result.onlineDevices || 0
+    const offlineCount = result.offlineDevices || 0
+    const totalDevices = result.totalDevices || 0
     const onlineRate = totalDevices > 0 ? Math.round((onlineCount / totalDevices) * 100) : 0
 
     // 提取离线设备详细信息
     const offlineDevicesList = (result.details || []).filter(device => !device.online).map(device => ({
-      deviceId: device.device_id,
+      deviceId: device.deviceId,
       hostname: device.hostname,
-      businessIp: device.business_ip || '未设置',
+      businessIp: device.businessIp || '未设置',
       location: device.location || '未知',
-      errorMessage: device.check_details?.error || device.check_details?.ping?.error || '连接超时'
+      errorMessage: device.checkDetails?.error || device.checkDetails?.ping?.error || '连接超时'
     }))
 
     // 更新统计数据
@@ -1407,8 +1410,8 @@ function handleGetConnectivityStats() {
       totalDevices,
       onlineDevices: onlineCount,
       offlineDevices: offlineCount,
-      checkDuration: result.check_duration_ms?.toFixed(1) || 0,
-      checkTime: result.check_time ? new Date(result.check_time).toLocaleString() : '未知',
+      checkDuration: result.checkDurationMs?.toFixed(1) || 0,
+      checkTime: result.checkTime ? new Date(result.checkTime).toLocaleString() : '未知',
       onlineRate,
       offlineDevicesList
     }
@@ -2208,13 +2211,13 @@ getList();
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: 9px;
   text-align: center;
   line-height: 1.2;
 }
 
 .device-range {
-  font-size: 9px;
+  font-size: 7px;
   color: #666;
   text-align: center;
   margin-top: 3px;

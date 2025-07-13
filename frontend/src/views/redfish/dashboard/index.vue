@@ -10,12 +10,12 @@
       <!-- 主悬浮图标 -->
       <div class="floating-icon">
         <el-icon :class="wsReady ? 'status-ready' : 'status-disconnected'">
-          <CircleCheck v-if="wsReady" />
-          <CircleClose v-else />
-        </el-icon>
+                <CircleCheck v-if="wsReady" />
+                <CircleClose v-else />
+              </el-icon>
       </div>
-    </div>
-
+            </div>
+            
     <!-- 左侧弹出的手动监控按钮 -->
     <div 
       v-show="showManualMonitorButton"
@@ -25,30 +25,44 @@
         top: (floatingPosition.y + 5) + 'px' 
       }"
     >
-      <!-- 监控进度显示 -->
+            <!-- 监控进度显示 -->
       <div v-if="monitoringProgress.isMonitoring" class="monitoring-progress-popup">
-        <el-progress 
-          :percentage="monitoringProgress.progress" 
-          :status="monitoringProgress.progress === 100 ? 'success' : undefined"
+              <el-progress 
+                :percentage="monitoringProgress.progress" 
+                :status="monitoringProgress.progress === 100 ? 'success' : undefined"
           :stroke-width="4"
-        />
+              />
         <div class="progress-info-popup">
           {{ monitoringProgress.currentDevice }} 
-          ({{ monitoringProgress.completed }}/{{ monitoringProgress.total }})
-        </div>
-      </div>
-      
+                ({{ monitoringProgress.completed }}/{{ monitoringProgress.total }})
+              </div>
+            </div>
+            
       <!-- 手动监控按钮 -->
-      <el-button 
-        type="primary" 
+              <el-button 
+                type="primary" 
         size="default"
-        :disabled="!wsReady || isButtonLoading || monitoringProgress.isMonitoring"
-        :loading="isButtonLoading"
-        @click="triggerManualMonitoring"
+                :disabled="!wsReady || isButtonLoading || monitoringProgress.isMonitoring"
+                :loading="isButtonLoading"
+                @click="triggerManualMonitoring"
         class="manual-monitor-btn"
+              >
+                <el-icon v-if="!isButtonLoading"><Refresh /></el-icon>
+                {{ isButtonLoading ? '触发中...' : '手动监控' }}
+              </el-button>
+
+      <!-- 设备状态刷新按钮 -->
+      <el-button 
+        type="success" 
+        size="default"
+        :disabled="isRefreshStatusLoading"
+        :loading="isRefreshStatusLoading"
+        @click="refreshDeviceStatusCache"
+        class="refresh-status-btn"
+        style="margin-top: 8px;"
       >
-        <el-icon v-if="!isButtonLoading"><Refresh /></el-icon>
-        {{ isButtonLoading ? '触发中...' : '手动监控' }}
+        <el-icon v-if="!isRefreshStatusLoading"><Monitor /></el-icon>
+        {{ isRefreshStatusLoading ? '刷新中...' : '刷新状态' }}
       </el-button>
       
       <!-- 连接失败时显示重连按钮 -->
@@ -61,7 +75,7 @@
       >
         重新连接
       </el-button>
-    </div>
+            </div>
     
     <!-- 统计卡片区域 -->
     <el-row :gutter="20" class="mb-20">
@@ -242,7 +256,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { Monitor, Warning, Bell, CircleClose, CircleCheck, Refresh, Close } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import { getDashboardOverview, getAlertTrend, getDeviceHealth, getRealtimeAlerts, getScheduledAlerts } from '@/api/redfish/dashboard'
+import { getDashboardOverview, getAlertTrend, getDeviceHealth, getRealtimeAlerts, getScheduledAlerts, refreshDeviceStatus } from '@/api/redfish/dashboard'
 import { triggerMonitor } from '@/api/redfish/monitor'
 import websocketService from '@/utils/websocket'
 import { ElNotification, ElMessage } from 'element-plus'
@@ -277,6 +291,7 @@ const wsConnecting = ref(false)
 // 按钮状态管理
 const isButtonLoading = ref(false)
 const buttonTimeout = ref(null)
+const isRefreshStatusLoading = ref(false)
 
 // 监控超时管理
 const monitoringTimeout = ref(null)
@@ -1175,6 +1190,45 @@ const triggerManualMonitoring = async () => {
   }
 }
 
+// 刷新设备状态缓存
+const refreshDeviceStatusCache = async () => {
+  // 检查是否已经在loading状态
+  if (isRefreshStatusLoading.value) {
+    console.warn('[Dashboard] 设备状态刷新正在进行中，忽略重复点击')
+    return
+  }
+
+  try {
+    // 设置loading状态
+    isRefreshStatusLoading.value = true
+    
+    console.log('[Dashboard] 开始刷新设备状态缓存...')
+    
+    // 调用刷新设备状态缓存API
+    const response = await refreshDeviceStatus()
+    
+    if (response.success) {
+      console.log('[Dashboard] 设备状态缓存刷新成功')
+      ElMessage.success('设备状态已刷新')
+      
+      // 立即刷新概览数据以获取最新状态
+      await loadOverviewData()
+      
+    } else {
+      console.error('[Dashboard] 设备状态缓存刷新失败:', response.msg)
+      ElMessage.error(response.msg || '刷新设备状态失败')
+    }
+  } catch (error) {
+    console.error('[Dashboard] 刷新设备状态缓存异常:', error)
+    ElMessage.error('刷新设备状态失败，请稍后重试')
+  } finally {
+    // 恢复按钮状态（延迟500ms，避免过快恢复）
+    setTimeout(() => {
+      isRefreshStatusLoading.value = false
+    }, 500)
+  }
+}
+
 // ===============================================================
 // 生命周期钩子
 // ===============================================================
@@ -1421,17 +1475,17 @@ const initializeWebSocketConnection = () => {
     width: 260px;
     min-height: 140px;
     padding: 12px;
-  }
-  
+}
+
   .floating-control-panel:not(.expanded) {
     width: 45px;
     height: 45px;
-  }
-  
+}
+
   .floating-icon .el-icon {
     font-size: 20px;
-  }
-  
+}
+
   .floating-content .connection-status,
   .floating-content .progress-info {
     font-size: 11px;

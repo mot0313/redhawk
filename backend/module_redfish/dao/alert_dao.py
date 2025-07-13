@@ -49,13 +49,17 @@ class AlertDao:
             AlertInfo.maintenance_description,
             AlertInfo.maintenance_status,
             AlertInfo.maintenance_notes,
+            AlertInfo.create_time,
+            AlertInfo.update_time,
             DeviceInfo.hostname,
             DeviceInfo.business_ip,
             DeviceInfo.location
         ).join(DeviceInfo, AlertInfo.device_id == DeviceInfo.device_id)
         
         # 构建查询条件
-        conditions = []
+        conditions = [
+            AlertInfo.alert_status != 'deleted'  # 排除已删除的告警
+        ]
         
         if query_object.device_id:
             conditions.append(AlertInfo.device_id == query_object.device_id)
@@ -132,7 +136,9 @@ class AlertDao:
                     'scheduled_maintenance_time': row.scheduled_maintenance_time,
                     'maintenance_description': row.maintenance_description,
                     'maintenance_status': row.maintenance_status or 'none',
-                    'maintenance_notes': row.maintenance_notes
+                    'maintenance_notes': row.maintenance_notes,
+                    'create_time': row.create_time,
+                    'update_time': row.update_time
                 }
                 alert_list.append(alert_dict)
             
@@ -164,7 +170,9 @@ class AlertDao:
                     'scheduled_maintenance_time': row.scheduled_maintenance_time,
                     'maintenance_description': row.maintenance_description,
                     'maintenance_status': row.maintenance_status or 'none',
-                    'maintenance_notes': row.maintenance_notes
+                    'maintenance_notes': row.maintenance_notes,
+                    'create_time': row.create_time,
+                    'update_time': row.update_time
                 }
                 alert_list.append(alert_dict)
             
@@ -201,7 +209,10 @@ class AlertDao:
             DeviceInfo.business_type,
             DeviceInfo.system_owner
         ).join(DeviceInfo, AlertInfo.device_id == DeviceInfo.device_id
-        ).where(AlertInfo.alert_id == alert_id)
+        ).where(
+            AlertInfo.alert_id == alert_id,
+            AlertInfo.alert_status != 'deleted'  # 排除已删除的告警
+        )
         
         result = await db.execute(query)
         row = result.first()
@@ -209,9 +220,6 @@ class AlertDao:
         if row:
             # 生成基于组件状态的告警消息
             alert_message = f"{row.component_type} {row.component_name} 状态异常: {row.health_status}"
-            
-            # 计算发生次数（精简版使用固定值1）
-            occurrence_count = 1
             
             return {
                 'alert_id': row.alert_id,
@@ -227,7 +235,6 @@ class AlertDao:
                 'urgency_level': row.urgency_level,
                 'alert_status': row.alert_status,
                 'alert_message': alert_message,
-                'occurrence_count': occurrence_count,
                 'first_occurrence': row.first_occurrence,
                 'last_occurrence': row.last_occurrence,
                 'resolved_time': row.resolved_time,
@@ -873,3 +880,105 @@ class AlertDao:
             logger.error(f"获取日历维修计划失败: {str(e)}")
             raise
  
+    @classmethod
+    async def delete_alert(
+        cls,
+        db: AsyncSession,
+        alert_id: int,
+        delete_reason: Optional[str] = None
+    ) -> bool:
+        """
+        删除告警（逻辑删除）
+        
+        Args:
+            db: 数据库会话
+            alert_id: 告警ID
+            delete_reason: 删除原因
+            
+        Returns:
+            bool: 是否成功
+        """
+        try:
+            # 逻辑删除：修改状态为deleted
+            stmt = update(AlertInfo).where(
+                AlertInfo.alert_id == alert_id,
+                AlertInfo.alert_status != 'deleted'  # 防止重复删除
+            ).values(
+                alert_status='deleted',
+                resolved_time=datetime.now(),
+                maintenance_notes=delete_reason or '手动删除',
+                update_time=datetime.now()
+            )
+            
+            result = await db.execute(stmt)
+            await db.commit()
+            
+            return result.rowcount > 0
+            
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"删除告警失败: {str(e)}")
+            return False
+    
+    @classmethod
+    async def batch_delete_alerts(
+        cls,
+        db: AsyncSession,
+        alert_ids: List[int],
+        delete_reason: Optional[str] = None
+    ) -> int:
+        """
+        批量删除告警（逻辑删除）
+        
+        Args:
+            db: 数据库会话
+            alert_ids: 告警ID列表
+            delete_reason: 删除原因
+            
+        Returns:
+            int: 成功删除的数量
+        """
+        try:
+            # 逻辑删除：修改状态为deleted
+            stmt = update(AlertInfo).where(
+                AlertInfo.alert_id.in_(alert_ids),
+                AlertInfo.alert_status != 'deleted'  # 防止重复删除
+            ).values(
+                alert_status='deleted',
+                resolved_time=datetime.now(),
+                maintenance_notes=delete_reason or '批量删除',
+                update_time=datetime.now()
+            )
+            
+            result = await db.execute(stmt)
+            await db.commit()
+            
+            return result.rowcount
+            
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"批量删除告警失败: {str(e)}")
+            return 0
+    
+    @classmethod
+    async def get_alert_info_by_id(cls, db: AsyncSession, alert_id: int) -> Optional[AlertInfo]:
+        """
+        根据ID获取告警信息（返回SQLAlchemy对象）
+        
+        Args:
+            db: 数据库会话
+            alert_id: 告警ID
+            
+        Returns:
+            Optional[AlertInfo]: 告警信息
+        """
+        try:
+            stmt = select(AlertInfo).where(
+                AlertInfo.alert_id == alert_id,
+                AlertInfo.alert_status != 'deleted'  # 排除已删除的告警
+            )
+            result = await db.execute(stmt)
+            return result.scalar_one_or_none()
+        except Exception as e:
+            logger.error(f"获取告警信息失败: {str(e)}")
+            return None 

@@ -12,7 +12,6 @@ from module_redfish.entity.vo.dashboard_vo import DashboardQueryModel
 from module_redfish.service.dashboard_service import DashboardService
 from utils.response_util import ResponseUtil
 from utils.log_util import logger
-from utils.common_util import CamelCaseUtil
 
 
 dashboardController = APIRouter(prefix='/redfish/dashboard', dependencies=[Depends(LoginService.get_current_user)])
@@ -21,15 +20,16 @@ dashboardController = APIRouter(prefix='/redfish/dashboard', dependencies=[Depen
 @dashboardController.get('/overview', dependencies=[Depends(CheckUserInterfaceAuth('redfish:dashboard:overview'))])
 async def get_dashboard_overview(
     request: Request,
-    time_range: str = Query(default="7d", description="时间范围: 7d/30d/90d"),
+    query_model: DashboardQueryModel = Depends(),
     query_db: AsyncSession = Depends(get_db)
 ):
     """获取首页概览数据"""
     try:
-        query_model = DashboardQueryModel(timeRange=time_range)
-        overview_data = await DashboardService.get_dashboard_overview_services(query_db, query_model)
-        logger.info('获取首页概览数据成功')
-        return ResponseUtil.success(data=CamelCaseUtil.transform_result(overview_data))
+        overview_data = await DashboardService.get_dashboard_overview_services(
+            query_db, query_model, query_model.force_refresh
+        )
+        logger.info(f'获取首页概览数据成功 (force_refresh={query_model.force_refresh})')
+        return ResponseUtil.success(data=overview_data)
     except Exception as e:
         logger.error(f'获取首页概览数据失败: {str(e)}')
         return ResponseUtil.failure(msg='获取首页概览数据失败')
@@ -45,7 +45,7 @@ async def get_alert_trend_chart(
     try:
         trend_data = await DashboardService.get_alert_trend_chart_services(query_db, days)
         logger.info(f'获取告警趋势图数据成功: {days}天')
-        return ResponseUtil.success(data=CamelCaseUtil.transform_result(trend_data))
+        return ResponseUtil.success(data=trend_data)
     except Exception as e:
         logger.error(f'获取告警趋势图数据失败: {str(e)}')
         return ResponseUtil.failure(msg='获取告警趋势图数据失败')
@@ -60,7 +60,7 @@ async def get_device_health_chart(
     try:
         health_data = await DashboardService.get_device_health_chart_services(query_db)
         logger.info('获取设备健康图数据成功')
-        return ResponseUtil.success(data=CamelCaseUtil.transform_result(health_data))
+        return ResponseUtil.success(data=health_data)
     except Exception as e:
         logger.error(f'获取设备健康图数据失败: {str(e)}')
         return ResponseUtil.failure(msg='获取设备健康图数据失败')
@@ -76,7 +76,7 @@ async def get_realtime_alert_list(
     try:
         realtime_alerts = await DashboardService.get_realtime_alert_list_services(query_db, limit)
         logger.info('获取实时告警列表成功')
-        return ResponseUtil.success(data=CamelCaseUtil.transform_result(realtime_alerts))
+        return ResponseUtil.success(data=realtime_alerts)
     except Exception as e:
         logger.error(f'获取实时告警列表失败: {str(e)}')
         return ResponseUtil.failure(msg='获取实时告警列表失败')
@@ -92,7 +92,7 @@ async def get_scheduled_alert_list(
     try:
         scheduled_alerts = await DashboardService.get_scheduled_alert_list_services(query_db, limit)
         logger.info('获取择期告警列表成功')
-        return ResponseUtil.success(data=CamelCaseUtil.transform_result(scheduled_alerts))
+        return ResponseUtil.success(data=scheduled_alerts)
     except Exception as e:
         logger.error(f'获取择期告警列表失败: {str(e)}')
         return ResponseUtil.failure(msg='获取择期告警列表失败')
@@ -108,7 +108,7 @@ async def get_device_health_summary(
     try:
         device_summary = await DashboardService.get_device_health_summary_services(query_db, limit)
         logger.info('获取设备健康汇总列表成功')
-        return ResponseUtil.success(data=CamelCaseUtil.transform_result(device_summary))
+        return ResponseUtil.success(data=device_summary)
     except Exception as e:
         logger.error(f'获取设备健康汇总列表失败: {str(e)}')
         return ResponseUtil.failure(msg='获取设备健康汇总列表失败')
@@ -123,7 +123,7 @@ async def get_system_health_metrics(
     try:
         metrics_data = await DashboardService.get_system_health_metrics_services(query_db)
         logger.info('获取系统健康指标成功')
-        return ResponseUtil.success(data=CamelCaseUtil.transform_result(metrics_data))
+        return ResponseUtil.success(data=metrics_data)
     except Exception as e:
         logger.error(f'获取系统健康指标失败: {str(e)}')
         return ResponseUtil.failure(msg='获取系统健康指标失败')
@@ -132,15 +132,16 @@ async def get_system_health_metrics(
 @dashboardController.get('/complete', dependencies=[Depends(CheckUserInterfaceAuth('redfish:dashboard:view'))])
 async def get_complete_dashboard_data(
     request: Request,
-    time_range: str = Query(default="7d", description="时间范围: 7d/30d/90d"),
+    query_model: DashboardQueryModel = Depends(),
     query_db: AsyncSession = Depends(get_db)
 ):
     """获取完整的首页数据（一次性获取所有数据）"""
     try:
-        query_model = DashboardQueryModel(timeRange=time_range)
-        complete_data = await DashboardService.get_complete_dashboard_data_services(query_db, query_model)
-        logger.info('获取完整首页数据成功')
-        return ResponseUtil.success(data=CamelCaseUtil.transform_result(complete_data))
+        complete_data = await DashboardService.get_complete_dashboard_data_services(
+            query_db, query_model, query_model.force_refresh
+        )
+        logger.info(f'获取完整首页数据成功 (force_refresh={query_model.force_refresh})')
+        return ResponseUtil.success(data=complete_data)
     except Exception as e:
         logger.error(f'获取完整首页数据失败: {str(e)}')
         return ResponseUtil.failure(msg='获取完整首页数据失败')
@@ -150,19 +151,21 @@ async def get_complete_dashboard_data(
 async def refresh_dashboard_data(
     request: Request,
     component: str = Query(default="all", description="刷新组件: all/overview/alert/device/metrics"),
-    time_range: str = Query(default="7d", description="时间范围: 7d/30d/90d"),
+    query_model: DashboardQueryModel = Depends(),
     query_db: AsyncSession = Depends(get_db)
 ):
     """刷新首页数据"""
     try:
-        query_model = DashboardQueryModel(timeRange=time_range)
-        
         if component == "all":
-            data = await DashboardService.get_complete_dashboard_data_services(query_db, query_model)
+            data = await DashboardService.get_complete_dashboard_data_services(
+                query_db, query_model, query_model.force_refresh
+            )
         elif component == "overview":
-            data = await DashboardService.get_dashboard_overview_services(query_db, query_model)
+            data = await DashboardService.get_dashboard_overview_services(
+                query_db, query_model, query_model.force_refresh
+            )
         elif component == "alert":
-            days = 7 if time_range == "7d" else 30 if time_range == "30d" else 90
+            days = 7 if query_model.time_range == "7d" else 30 if query_model.time_range == "30d" else 90
             trend_data = await DashboardService.get_alert_trend_chart_services(query_db, days)
             realtime_alerts = await DashboardService.get_realtime_alert_list_services(query_db, 10)
             scheduled_alerts = await DashboardService.get_scheduled_alert_list_services(query_db, 10)
@@ -184,7 +187,7 @@ async def refresh_dashboard_data(
             return ResponseUtil.failure(msg="无效的组件参数")
         
         logger.info(f'刷新首页数据成功: {component}')
-        return ResponseUtil.success(data=CamelCaseUtil.transform_result(data))
+        return ResponseUtil.success(data=data)
     except Exception as e:
         logger.error(f'刷新首页数据失败: {str(e)}')
         return ResponseUtil.failure(msg='刷新首页数据失败') 

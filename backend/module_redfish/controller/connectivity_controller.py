@@ -10,6 +10,13 @@ from module_admin.aspect.interface_auth import CheckUserInterfaceAuth
 from module_admin.entity.vo.user_vo import CurrentUserModel
 from module_admin.service.login_service import LoginService
 from module_redfish.service.connectivity_service import ConnectivityService
+from module_redfish.entity.vo.connectivity_vo import (
+    ConnectivityStatsQueryModel,
+    BatchCheckQueryModel,
+    IpConnectivityQueryModel,
+    ConnectivityStatsResponseModel,
+    SingleDeviceConnectivityResponseModel
+)
 from utils.response_util import ResponseUtil
 from utils.log_util import logger
 
@@ -31,16 +38,25 @@ async def check_single_device_connectivity(
 ):
     """检测单个设备的业务IP连通性"""
     try:
-        result = await ConnectivityService.check_device_business_ip_connectivity(
+        service_result = await ConnectivityService.check_device_business_ip_connectivity(
             query_db, device_id=device_id
         )
         
-        if result.get("online", False):
+        # 转换为响应模型（驼峰命名）
+        response_model = SingleDeviceConnectivityResponseModel.from_service_result(service_result)
+        
+        if service_result.get("online", False):
             logger.info(f'设备 {device_id} 连通性检测成功: 在线')
-            return ResponseUtil.success(data=result, msg='设备在线')
+            return ResponseUtil.success(
+                model_content=response_model,
+                msg='设备在线'
+            )
         else:
             logger.info(f'设备 {device_id} 连通性检测完成: 离线')
-            return ResponseUtil.success(data=result, msg='设备离线')
+            return ResponseUtil.success(
+                model_content=response_model,
+                msg='设备离线'
+            )
             
     except Exception as e:
         logger.error(f'检测设备 {device_id} 连通性失败: {str(e)}')
@@ -53,7 +69,7 @@ async def check_single_device_connectivity(
 )
 async def batch_check_devices_connectivity(
     request: Request,
-    maxConcurrent: int = Query(default=20, ge=1, le=50, description="最大并发数", alias="maxConcurrent"),
+    query_params: BatchCheckQueryModel = Depends(BatchCheckQueryModel.as_query),
     query_db: AsyncSession = Depends(get_db)
 ):
     """批量检测设备连通性"""
@@ -84,14 +100,20 @@ async def batch_check_devices_connectivity(
                 logger.error(f"device_ids包含无效的设备ID: {e}")
                 return ResponseUtil.failure(msg='device_ids必须包含有效的设备ID（整数）')
         
-        logger.info(f"开始批量连通性检测，设备IDs: {device_ids}, 最大并发: {maxConcurrent}")
+        logger.info(f"开始批量连通性检测，设备IDs: {device_ids}, 最大并发: {query_params.max_concurrent}")
         
-        result = await ConnectivityService.batch_check_connectivity(
-            query_db, device_ids=device_ids, max_concurrent=maxConcurrent
+        service_result = await ConnectivityService.batch_check_connectivity(
+            query_db, device_ids=device_ids, max_concurrent=query_params.max_concurrent
         )
         
-        logger.info(f'批量连通性检测完成: {result.get("online_devices", 0)} 在线, {result.get("offline_devices", 0)} 离线')
-        return ResponseUtil.success(data=result, msg='批量连通性检测完成')
+        # 转换为响应模型（驼峰命名）
+        response_model = ConnectivityStatsResponseModel.from_service_result(service_result)
+        
+        logger.info(f'批量连通性检测完成: {service_result.get("online_devices", 0)} 在线, {service_result.get("offline_devices", 0)} 离线')
+        return ResponseUtil.success(
+            model_content=response_model,
+            msg='批量连通性检测完成'
+        )
         
     except Exception as e:
         logger.error(f'批量连通性检测失败: {str(e)}', exc_info=True)
@@ -104,18 +126,25 @@ async def batch_check_devices_connectivity(
 )
 async def get_connectivity_statistics(
     request: Request,
-    use_cache: bool = Query(default=True, description="是否使用缓存"),
-    cache_ttl_minutes: int = Query(default=5, ge=1, le=60, description="缓存时间（分钟）"),
+    query_params: ConnectivityStatsQueryModel = Depends(ConnectivityStatsQueryModel.as_query),
     query_db: AsyncSession = Depends(get_db)
 ):
     """获取设备连通性统计"""
     try:
-        result = await ConnectivityService.get_connectivity_statistics(
-            query_db, use_cache=use_cache, cache_ttl_minutes=cache_ttl_minutes
+        logger.info(f'获取连通性统计请求: use_cache={query_params.use_cache}, cache_ttl_minutes={query_params.cache_ttl_minutes}')
+        
+        service_result = await ConnectivityService.get_connectivity_statistics(
+            query_db, use_cache=query_params.use_cache, cache_ttl_minutes=query_params.cache_ttl_minutes
         )
         
-        logger.info(f'获取连通性统计成功: {result.get("online_devices", 0)} 在线, {result.get("offline_devices", 0)} 离线')
-        return ResponseUtil.success(data=result, msg='获取连通性统计成功')
+        # 转换为响应模型（驼峰命名）
+        response_model = ConnectivityStatsResponseModel.from_service_result(service_result)
+        
+        logger.info(f'获取连通性统计成功: {service_result.get("online_devices", 0)} 在线, {service_result.get("offline_devices", 0)} 离线')
+        return ResponseUtil.success(
+            model_content=response_model,
+            msg='获取连通性统计成功'
+        )
         
     except Exception as e:
         logger.error(f'获取连通性统计失败: {str(e)}')
@@ -132,17 +161,50 @@ async def refresh_connectivity_cache(
 ):
     """刷新连通性统计缓存"""
     try:
+        # 先清理旧缓存
+        try:
+            from module_admin.service.cache_service import CacheService
+            await CacheService.delete_cache("connectivity_stats")
+            logger.info("已清理旧的连通性统计缓存")
+        except Exception as e:
+            logger.warning(f"清理缓存失败: {e}")
+        
         # 强制刷新（不使用缓存）
-        result = await ConnectivityService.get_connectivity_statistics(
+        service_result = await ConnectivityService.get_connectivity_statistics(
             query_db, use_cache=False
         )
         
-        logger.info(f'连通性统计缓存已刷新: {result.get("online_devices", 0)} 在线, {result.get("offline_devices", 0)} 离线')
-        return ResponseUtil.success(data=result, msg='缓存已刷新')
+        # 转换为响应模型（驼峰命名）
+        response_model = ConnectivityStatsResponseModel.from_service_result(service_result)
+        
+        logger.info(f'连通性统计缓存已刷新: {service_result.get("online_devices", 0)} 在线, {service_result.get("offline_devices", 0)} 离线')
+        return ResponseUtil.success(
+            model_content=response_model,
+            msg='缓存已刷新'
+        )
         
     except Exception as e:
         logger.error(f'刷新连通性缓存失败: {str(e)}')
         return ResponseUtil.failure(msg=f'刷新缓存失败: {str(e)}')
+
+
+@connectivityController.post(
+    '/clear-cache',
+    dependencies=[Depends(CheckUserInterfaceAuth('redfish:device:test'))]
+)
+async def clear_connectivity_cache(
+    request: Request
+):
+    """清理连通性统计缓存"""
+    try:
+        from module_admin.service.cache_service import CacheService
+        await CacheService.delete_cache("connectivity_stats")
+        logger.info("连通性统计缓存已清理")
+        return ResponseUtil.success(msg='缓存已清理')
+        
+    except Exception as e:
+        logger.error(f'清理连通性缓存失败: {str(e)}')
+        return ResponseUtil.failure(msg=f'清理缓存失败: {str(e)}')
 
 
 @connectivityController.post(
@@ -161,13 +223,19 @@ async def check_ip_connectivity(
         if not business_ip:
             return ResponseUtil.failure(msg='请提供业务IP地址')
         
-        result = await ConnectivityService.check_device_business_ip_connectivity(
+        service_result = await ConnectivityService.check_device_business_ip_connectivity(
             query_db, business_ip=business_ip
         )
         
-        status = "在线" if result.get("online", False) else "离线"
+        # 转换为响应模型（驼峰命名）
+        response_model = SingleDeviceConnectivityResponseModel.from_service_result(service_result)
+        
+        status = "在线" if service_result.get("online", False) else "离线"
         logger.info(f'IP {business_ip} 连通性检测完成: {status}')
-        return ResponseUtil.success(data=result, msg=f'IP连通性检测完成: {status}')
+        return ResponseUtil.success(
+            model_content=response_model,
+            msg=f'IP连通性检测完成: {status}'
+        )
         
     except Exception as e:
         logger.error(f'IP连通性检测失败: {str(e)}')

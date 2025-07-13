@@ -3,11 +3,15 @@
 """
 from datetime import datetime, date
 from typing import Optional, List, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from pydantic.alias_generators import to_camel
+from module_admin.annotation.pydantic_annotation import as_query
 
 
 class DashboardOverviewModel(BaseModel):
     """首页概览模型"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     totalDevices: int = Field(..., description="设备总数")
     onlineDevices: int = Field(..., description="在线设备数")
     offlineDevices: int = Field(..., description="离线设备数")
@@ -34,6 +38,8 @@ class DashboardOverviewModel(BaseModel):
 
 class AlertTrendChartModel(BaseModel):
     """告警趋势图模型"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     dates: List[str] = Field(..., description="日期列表")
     urgentCounts: List[int] = Field(..., description="紧急告警数量列表")
     scheduledCounts: List[int] = Field(..., description="择期告警数量列表")
@@ -42,6 +48,8 @@ class AlertTrendChartModel(BaseModel):
 
 class DeviceHealthChartModel(BaseModel):
     """设备健康图模型"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     healthyCount: int = Field(..., description="健康设备数")
     warningCount: int = Field(..., description="告警设备数")
     criticalCount: int = Field(..., description="已废弃字段(critical已合并到warning)")
@@ -53,6 +61,8 @@ class DeviceHealthChartModel(BaseModel):
 
 class RealtimeAlertListModel(BaseModel):
     """实时告警列表模型"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     deviceId: int = Field(..., description="设备ID")
     hostname: str = Field(..., description="主机名")
     businessIp: str = Field(..., description="业务IP")
@@ -69,6 +79,8 @@ class RealtimeAlertListModel(BaseModel):
 
 class ScheduledAlertListModel(BaseModel):
     """择期告警列表模型"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     deviceId: int = Field(..., description="设备ID")
     hostname: str = Field(..., description="主机名")
     businessIp: str = Field(..., description="业务IP")
@@ -83,6 +95,8 @@ class ScheduledAlertListModel(BaseModel):
 
 class DeviceHealthSummaryListModel(BaseModel):
     """设备健康汇总列表模型"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     deviceId: int = Field(..., description="设备ID")
     hostname: str = Field(..., description="主机名")
     businessIp: str = Field(..., description="业务IP")
@@ -106,6 +120,8 @@ class DeviceHealthSummaryListModel(BaseModel):
 
 class AlertDistributionModel(BaseModel):
     """告警分布模型"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     byLevel: Dict[str, int] = Field(..., description="按级别分布")
     byComponent: Dict[str, int] = Field(..., description="按组件分布")
     byLocation: Dict[str, int] = Field(..., description="按位置分布")
@@ -114,6 +130,8 @@ class AlertDistributionModel(BaseModel):
 
 class SystemHealthMetricsModel(BaseModel):
     """系统健康指标模型"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     totalMonitoringPoints: int = Field(..., description="总监控点数")
     healthyPoints: int = Field(..., description="健康监控点数")
     warningPoints: int = Field(..., description="告警监控点数")
@@ -130,16 +148,22 @@ class SystemHealthMetricsModel(BaseModel):
     lastCalculationTime: datetime = Field(..., description="最后计算时间")
 
 
+@as_query
 class DashboardQueryModel(BaseModel):
     """首页数据查询模型"""
-    timeRange: str = Field(default="7d", description="时间范围(7d/30d/90d)")
-    includeResolved: bool = Field(default=False, description="是否包含已解决告警")
-    locationFilter: Optional[str] = Field(default=None, description="位置过滤")
-    manufacturerFilter: Optional[str] = Field(default=None, description="制造商过滤")
+    model_config = ConfigDict(alias_generator=to_camel)
+    
+    time_range: str = Field(default="7d", description="时间范围(7d/30d/90d)")
+    include_resolved: bool = Field(default=False, description="是否包含已解决告警")
+    location_filter: Optional[str] = Field(default=None, description="位置过滤")
+    manufacturer_filter: Optional[str] = Field(default=None, description="制造商过滤")
+    force_refresh: bool = Field(default=False, description="是否强制刷新，跳过缓存")
 
 
 class DashboardDataModel(BaseModel):
     """首页完整数据模型"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     overview: DashboardOverviewModel = Field(..., description="概览数据")
     alertTrend: AlertTrendChartModel = Field(..., description="告警趋势图")
     deviceHealthChart: DeviceHealthChartModel = Field(..., description="设备健康图")

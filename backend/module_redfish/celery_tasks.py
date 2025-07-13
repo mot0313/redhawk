@@ -120,6 +120,27 @@ def check_batch_completion(batch_id: str, task_success: bool = True):
             
             logger.info(f"Pushed monitoring completed notification: {total_count} devices ({successful_devices} success, {failed_devices} failed)")
             
+            # 监控完成后清除设备状态缓存，确保下次请求获取最新数据
+            try:
+                from module_admin.service.cache_service import CacheService
+                import asyncio
+                
+                # 在同步任务中运行异步代码
+                async def clear_cache():
+                    await CacheService.delete_cache("connectivity_stats")
+                    logger.info("Monitoring completed: device status cache cleared")
+                
+                # 运行异步缓存清理
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(clear_cache())
+                finally:
+                    loop.close()
+                    
+            except Exception as e:
+                logger.warning(f"Failed to clear device status cache after monitoring: {str(e)}")
+            
             # 清理Redis计数器
             redis_client.delete(counter_key, total_key, success_key, failed_key)
             

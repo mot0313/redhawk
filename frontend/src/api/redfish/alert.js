@@ -76,8 +76,7 @@ export function exportAlerts(params) {
   return request({
     url: '/redfish/alert/export',
     method: 'get',
-    params: params,
-    responseType: 'blob'
+    params: params
   })
 }
 
@@ -134,5 +133,25 @@ export function getCalendarMaintenance(startDate, endDate) {
       start_date: startDate,
       end_date: endDate
     }
+  })
+}
+
+// 删除告警
+export function deleteAlert(alertId, deleteReason) {
+  return request({
+    url: `/redfish/alert/remove/${alertId}`,
+    method: 'delete',
+    params: {
+      delete_reason: deleteReason
+    }
+  })
+}
+
+// 批量删除告警
+export function batchDeleteAlerts(data) {
+  return request({
+    url: '/redfish/alert/batch-remove',
+    method: 'delete',
+    data: data
   })
 } 

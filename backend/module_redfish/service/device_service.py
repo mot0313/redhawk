@@ -68,23 +68,25 @@ class DeviceService:
                 device.business_type = business_type_mapping[device.business_type]
         
         if is_page:
-            # 使用现有的get_page_obj方法创建分页响应
-            has_next = math.ceil(total / query_object.page_size) > query_object.page_num if total > 0 else False
-            from utils.common_util import CamelCaseUtil
-            # 先转换为字典列表，再转换为驼峰格式
+            # 使用DevicePageResponseModel创建分页响应
+            from module_redfish.entity.vo.device_vo import DevicePageResponseModel
+            # 先转换为字典列表
             device_dict_list = [device.__dict__.copy() for device in device_list]
             for device_dict in device_dict_list:
                 device_dict.pop('_sa_instance_state', None)
-            return PageResponseModel(
-                rows=CamelCaseUtil.transform_result(device_dict_list),
-                pageNum=query_object.page_num,
-                pageSize=query_object.page_size,
-                total=total,
-                hasNext=has_next
+            return DevicePageResponseModel.create(
+                devices=device_dict_list,
+                page_num=query_object.page_num,
+                page_size=query_object.page_size,
+                total=total
             )
         else:
-            from utils.common_util import CamelCaseUtil
-            return CamelCaseUtil.transform_result(device_list)
+            # 非分页模式，返回设备列表
+            from module_redfish.entity.vo.device_vo import DeviceResponseModel
+            device_dict_list = [device.__dict__.copy() for device in device_list]
+            for device_dict in device_dict_list:
+                device_dict.pop('_sa_instance_state', None)
+            return [DeviceResponseModel(**device_dict) for device_dict in device_dict_list]
     
     @classmethod
     async def get_device_detail_services(cls, db: AsyncSession, device_id: int, for_edit: bool = False) -> DeviceDetailModel:
@@ -396,7 +398,7 @@ class DeviceService:
             return False
     
     @classmethod
-    async def get_device_statistics_services(cls, db: AsyncSession) -> Dict[str, int]:
+    async def get_device_statistics_services(cls, db: AsyncSession):
         """
         获取设备统计信息
         
@@ -404,9 +406,11 @@ class DeviceService:
             db: 数据库会话
             
         Returns:
-            Dict[str, int]: 统计信息
+            DeviceStatsResponseModel: 统计信息
         """
-        return await DeviceDao.get_device_statistics(db)
+        from module_redfish.entity.vo.device_vo import DeviceStatsResponseModel
+        stats = await DeviceDao.get_device_statistics(db)
+        return DeviceStatsResponseModel.create(stats)
 
     @classmethod
     async def batch_import_device_services(
@@ -608,14 +612,19 @@ class DeviceService:
         # 示例数据
         example_data = [
             [
-                'server-001', '192.168.1.101', '192.168.100.101', '数据中心A-机柜01', 
+                'server-001', '192.168.1.101', '192.168.100.101', 'XW_B1B07_25-26', 
                 'CentOS 7.9', 'SN20231001', 'PowerEdge R750', 'Dell', 
-                '虚拟化平台', '张三', 'OB-DATA-5N', 'admin', 'admin', '生产环境核心服务器'
+                '虚拟化平台', '张三', 'OB-GMT-3N', 'admin', 'admin', '生产环境核心服务器'
             ],
             [
-                'server-002', '192.168.1.102', '192.168.100.102', '数据中心A-机柜02', 
+                'server-002', '192.168.1.102', '192.168.100.102', 'YJ_F3D13_24-25', 
                 'Ubuntu 20.04', 'SN20231002', 'ProLiant DL380', 'HPE', 
                 '数据库服务', '李四', 'OB-GMT-3N', 'root', 'password', '数据库集群主节点'
+            ],
+            [
+                'server-003', '192.168.1.103', '192.168.100.103', 'YZ_B6C10_14-15', 
+                'Ubuntu 20.04', 'SN20231003', 'ProLiant DL380', 'HPE', 
+                '测试', '王五', 'OB-DATA-5N', 'Administrator', 'Password', '测试环境核心服务器'
             ]
         ]
         
@@ -758,8 +767,11 @@ class DeviceService:
         for index, item in enumerate(device_list, 1):
             # 确保 item 是字典类型，如果是对象则转换为字典
             if not isinstance(item, dict):
-                # 将对象转换为字典
-                if hasattr(item, '__dict__'):
+                # 将DeviceResponseModel对象转换为字典
+                if hasattr(item, 'model_dump'):
+                    # 使用Pydantic的model_dump方法，自动处理驼峰命名
+                    item = item.model_dump(by_alias=True)
+                elif hasattr(item, '__dict__'):
                     item_dict = {}
                     for key, value in item.__dict__.items():
                         if not key.startswith('_'):  # 排除私有属性

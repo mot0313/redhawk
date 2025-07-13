@@ -182,3 +182,26 @@ class CacheService:
         finally:
             if redis:
                 await redis.close()
+
+    @classmethod
+    async def delete_cache(cls, key: str):
+        """
+        删除缓存（通用方法，不依赖request）
+
+        :param key: 缓存键
+        """
+        redis = None
+        try:
+            redis = await aioredis.from_url(
+                url=f'redis://{RedisConfig.redis_host}',
+                port=RedisConfig.redis_port,
+                username=RedisConfig.redis_username,
+                password=RedisConfig.redis_password,
+                db=RedisConfig.redis_database,
+                encoding='utf-8',
+                decode_responses=True,
+            )
+            await redis.delete(key)
+        finally:
+            if redis:
+                await redis.close()

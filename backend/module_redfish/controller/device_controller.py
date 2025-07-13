@@ -14,7 +14,8 @@ from module_admin.entity.vo.user_vo import CurrentUserModel
 from module_admin.service.login_service import LoginService
 from module_redfish.entity.vo.device_vo import (
     DevicePageQueryModel, AddDeviceModel, EditDeviceModel, DeleteDeviceModel,
-    DeviceDetailModel, DeviceTestConnectionModel
+    DeviceDetailModel, DeviceTestConnectionModel, DevicePageResponseModel,
+    DeviceStatsResponseModel
 )
 from module_redfish.service.device_service import DeviceService
 from utils.response_util import ResponseUtil
@@ -28,7 +29,7 @@ deviceController = APIRouter(prefix='/redfish/device', dependencies=[Depends(Log
 
 @deviceController.get(
     '/list', 
-    response_model=PageResponseModel, 
+    response_model=DevicePageResponseModel, 
     dependencies=[Depends(CheckUserInterfaceAuth('redfish:device:list'))]
 )
 async def get_device_list(
@@ -48,7 +49,7 @@ async def get_device_list(
         return ResponseUtil.failure(msg='获取设备列表失败')
 
 
-@deviceController.get('/statistics', dependencies=[Depends(CheckUserInterfaceAuth('redfish:device:list'))])
+@deviceController.get('/statistics', response_model=DeviceStatsResponseModel, dependencies=[Depends(CheckUserInterfaceAuth('redfish:device:list'))])
 async def get_device_statistics(
     request: Request,
     query_db: AsyncSession = Depends(get_db)
@@ -57,7 +58,7 @@ async def get_device_statistics(
     try:
         statistics = await DeviceService.get_device_statistics_services(query_db)
         logger.info('获取设备统计信息成功')
-        return ResponseUtil.success(data=statistics)
+        return ResponseUtil.success(model_content=statistics)
     except Exception as e:
         logger.error(f'获取设备统计信息失败: {str(e)}')
         return ResponseUtil.failure(msg='获取设备统计信息失败')

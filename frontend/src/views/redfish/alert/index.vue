@@ -29,6 +29,17 @@
       </el-col>
       <el-col :span="1.5">
         <el-button
+          type="danger"
+          plain
+          icon="Delete"
+          :disabled="multiple"
+          @click="handleBatchDelete"
+          v-hasPermi="['redfish:alert:remove']"
+          v-show="viewMode === 'list'"
+        >删除</el-button>
+      </el-col>
+      <el-col :span="1.5">
+        <el-button
           type="info"
           plain
           icon="Download"
@@ -195,19 +206,11 @@
           </template>
         </el-table-column>
       <el-table-column
-        label="告警消息"
-        align="center"
-        key="alertMessage"
-        prop="alertMessage"
-        v-if="columns[5].visible"
-        :show-overflow-tooltip="true"
-      />
-      <el-table-column
         label="发生时间"
         align="center"
         key="occurrenceTime"
         width="160"
-        v-if="columns[6].visible"
+        v-if="columns[5].visible"
       >
           <template #default="scope">
             <div>
@@ -223,7 +226,7 @@
         align="center"
         key="alertStatus"
         width="80"
-        v-if="columns[7].visible"
+        v-if="columns[6].visible"
       >
           <template #default="scope">
             <el-tag
@@ -239,7 +242,7 @@
         align="center"
         key="maintenanceInfo"
         width="160"
-        v-if="columns[8].visible"
+        v-if="columns[7].visible"
       >
           <template #default="scope">
             <div v-if="scope.row.scheduledMaintenanceTime">
@@ -259,7 +262,7 @@
         align="center"
         width="200"
         fixed="right"
-        v-if="columns[9].visible"
+        v-if="columns[8].visible"
       >
           <template #default="scope">
             <el-button
@@ -275,6 +278,13 @@
               icon="Calendar"
               @click="handleScheduleMaintenance(scope.row)"
               v-hasPermi="['redfish:alert:maintenance']"
+            ></el-button>
+            <el-button
+              link
+              type="danger"
+              icon="Delete"
+              @click="handleDelete(scope.row)"
+              v-hasPermi="['redfish:alert:remove']"
             ></el-button>
           </template>
         </el-table-column>
@@ -335,13 +345,12 @@
 
     <!-- 告警详情弹窗 -->
     <el-dialog
-      title="告警详情"
+      title="告警详情" 
       v-model="detailVisible"
       width="800px"
       :close-on-click-modal="false"
     >
       <el-descriptions v-if="alertDetail" :column="2" border>
-        <el-descriptions-item label="告警ID">{{ alertDetail.alertId }}</el-descriptions-item>
         <el-descriptions-item label="设备名称">{{ alertDetail.hostname }}</el-descriptions-item>
         <el-descriptions-item label="业务IP">{{ alertDetail.businessIp }}</el-descriptions-item>
         <el-descriptions-item label="组件类型">{{ alertDetail.componentType }}</el-descriptions-item>
@@ -361,10 +370,8 @@
             {{ getAlertStatusText(alertDetail.alertStatus) }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="告警消息" :span="2">{{ alertDetail.alertMessage }}</el-descriptions-item>
         <el-descriptions-item label="首次发生">{{ parseTime(alertDetail.firstOccurrence) }}</el-descriptions-item>
         <el-descriptions-item label="最后发生">{{ parseTime(alertDetail.lastOccurrence) }}</el-descriptions-item>
-        <el-descriptions-item label="发生次数">{{ alertDetail.occurrenceCount }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ parseTime(alertDetail.createTime) }}</el-descriptions-item>
       </el-descriptions>
       <template #footer>
@@ -479,7 +486,9 @@ import {
   scheduleMaintenance,
   updateMaintenance,
   batchScheduleMaintenance,
-  getCalendarMaintenance
+  getCalendarMaintenance,
+  deleteAlert,
+  batchDeleteAlerts
 } from '@/api/redfish/alert'
 import { parseTime } from '@/utils/ruoyi'
 
@@ -506,11 +515,10 @@ const columns = ref([
   { key: 2, label: `组件信息`, visible: true },
   { key: 3, label: `紧急程度`, visible: true },
   { key: 4, label: `健康状态`, visible: true },
-  { key: 5, label: `告警消息`, visible: true },
-  { key: 6, label: `发生时间`, visible: true },
-  { key: 7, label: `状态`, visible: true },
-  { key: 8, label: `维修计划`, visible: true },
-  { key: 9, label: `操作`, visible: true }
+  { key: 5, label: `发生时间`, visible: true },
+  { key: 6, label: `状态`, visible: true },
+  { key: 7, label: `维修计划`, visible: true },
+  { key: 8, label: `操作`, visible: true }
 ])
 
 // 查询参数
@@ -615,8 +623,9 @@ function handleSelectionChange(selection) {
 /** 查看详情 */
 function handleDetail(row) {
   getAlertDetail(row.alertId).then(response => {
-    if (response && response.data) {
-      alertDetail.value = response.data
+    // 使用 model_content 响应格式，数据直接在响应根级别
+    if (response && response.alert) {
+      alertDetail.value = response.alert
       detailVisible.value = true
     } else {
       proxy.$modal.msgError("获取告警详情失败")
@@ -777,6 +786,39 @@ function submitBatchMaintenance() {
   })
 }
 
+/** 删除告警 */
+function handleDelete(row) {
+  proxy.$modal.confirm('确定删除该告警吗？').then(() => {
+    return deleteAlert(row.alertId, '手动删除')
+  }).then(() => {
+    getList()
+    proxy.$modal.msgSuccess("删除成功")
+  }).catch(() => {
+    proxy.$modal.msgError("删除失败")
+  })
+}
+
+/** 批量删除告警 */
+function handleBatchDelete() {
+  if (ids.value.length === 0) {
+    proxy.$modal.msgError("请选择要删除的告警")
+    return
+  }
+  
+  proxy.$modal.confirm('确定删除所选告警吗？').then(() => {
+    const requestData = {
+      alertIds: ids.value,
+      deleteReason: '批量删除'
+    }
+    return batchDeleteAlerts(requestData)
+  }).then(() => {
+    getList()
+    proxy.$modal.msgSuccess("删除成功")
+  }).catch(() => {
+    proxy.$modal.msgError("删除失败")
+  })
+}
+
 /** 日历相关方法 */
 
 /** 获取指定日期的维修项目 */
@@ -867,8 +909,11 @@ function loadMaintenanceData() {
     
     loading.value = true
     getCalendarMaintenance(startDateStr, endDateStr).then(response => {
-      if (response && response.data) {
-        alertList.value = response.data
+      // 使用 model_content 响应格式，数据在response.items中
+      if (response && response.items && Array.isArray(response.items)) {
+        alertList.value = response.items
+      } else {
+        alertList.value = []
       }
       loading.value = false
     }).catch(error => {

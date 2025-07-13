@@ -42,6 +42,9 @@ class DeviceDao:
         if query_object.business_ip:
             conditions.append(DeviceInfo.business_ip.like(f'%{query_object.business_ip}%'))
         
+        if query_object.oob_ip:
+            conditions.append(DeviceInfo.oob_ip.like(f'%{query_object.oob_ip}%'))
+        
         if query_object.location:
             conditions.append(DeviceInfo.location.like(f'%{query_object.location}%'))
         
