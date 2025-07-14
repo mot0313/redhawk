@@ -353,10 +353,13 @@ class ConnectivityService:
             import re
             # 支持多种格式
             patterns = [
-                r'时间[=<](\d+\.?\d*)ms',          # Windows中文
-                r'time[=<](\d+\.?\d*)\s*ms',      # Linux/macOS英文
-                r'time=(\d+\.?\d*)\s*ms',         # 通用格式
-                r'平均\s*=\s*(\d+\.?\d*)ms',      # Windows中文平均值
+                r'时间[=<](\d+\.?\d*)ms',                    # Windows中文
+                r'time[=<](\d+\.?\d*)\s*ms',                # Linux/macOS英文 time=XXms
+                r'time=(\d+\.?\d*)\s*ms',                   # 通用格式
+                r'平均\s*=\s*(\d+\.?\d*)ms',                # Windows中文平均值
+                r'round-trip.*?=\s*(\d+\.?\d*)/.*?ms',      # macOS格式: round-trip min/avg/max/stddev = 23.523/...
+                r'rtt.*?=\s*(\d+\.?\d*)/.*?ms',             # 某些Linux: rtt min/avg/max/mdev = XX.XX/...
+                r'(\d+\.?\d*)\s*ms',                        # 简单匹配任何数字+ms
             ]
             
             for pattern in patterns:

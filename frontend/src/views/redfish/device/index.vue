@@ -1314,25 +1314,27 @@ function handleCheckConnectivity(row) {
 
   checkDeviceConnectivity(row.deviceId).then(response => {
     proxy.$modal.closeLoading()
-
+    
     // 使用 model_content 响应格式，数据直接在响应根级别
     updateSingleDeviceConnectivity(row.deviceId, response)
 
     const status = response.online ? '在线' : '离线'
-    const pingTime = response.checkDetails?.ping?.responseTime || 'N/A'
+    // 根据实际响应数据结构访问字段
+    const pingTime = response.ping?.response_time || 'N/A'
+    const duration = response.checkDurationMs || 0
 
     if (response.online) {
       proxy.$modal.msgSuccess(`设备 ${row.hostname} (${response.businessIp}) 
       
 连通性检测结果: ${status}
 Ping响应时间: ${pingTime}
-检测耗时: ${response.checkDurationMs?.toFixed(1)}ms`)
+检测耗时: ${duration.toFixed(1)}ms`)
     } else {
       proxy.$modal.msgWarning(`设备 ${row.hostname} (${response.businessIp}) 
       
 连通性检测结果: ${status}
-错误信息: ${response.checkDetails?.ping?.error || '无详细错误信息'}
-检测耗时: ${response.checkDurationMs?.toFixed(1)}ms`)
+错误信息: ${response.ping?.error || response.error || '无详细错误信息'}
+检测耗时: ${duration.toFixed(1)}ms`)
     }
   }).catch(error => {
     proxy.$modal.closeLoading()
@@ -1363,9 +1365,9 @@ function handleBatchCheckConnectivity() {
 
     // 使用 model_content 响应格式，数据直接在响应根级别
     const result = response
-    const onlineCount = result.onlineDevices
-    const offlineCount = result.offlineDevices
-    const totalTime = result.checkDurationMs?.toFixed(1)
+    const onlineCount = result.onlineDevices || result.online_devices
+    const offlineCount = result.offlineDevices || result.offline_devices
+    const totalTime = (result.checkDurationMs || result.check_duration_ms || 0).toFixed(1)
 
     // 将连通性检测结果更新到设备列表中
     updateDeviceListConnectivity(result)

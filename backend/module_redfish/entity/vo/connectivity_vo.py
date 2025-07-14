@@ -86,8 +86,9 @@ class SingleDeviceConnectivityResponseModel(BaseModel):
     hostname: Optional[str] = Field(default=None, description="主机名")
     business_ip: Optional[str] = Field(default=None, description="业务IP")
     online: bool = Field(..., description="是否在线")
+    check_duration_ms: float = Field(default=0, description="检测耗时（毫秒）")
     check_time: str = Field(..., description="检测时间")
-    check_details: Optional[Dict[str, Any]] = Field(default=None, description="检测详情")
+    ping: Optional[Dict[str, Any]] = Field(default=None, description="Ping检测详情")
     error: Optional[str] = Field(default=None, description="错误信息")
     
     @classmethod
@@ -98,8 +99,9 @@ class SingleDeviceConnectivityResponseModel(BaseModel):
             hostname=service_result.get("hostname"),
             business_ip=service_result.get("business_ip"),
             online=service_result.get("online", False),
+            check_duration_ms=service_result.get("check_duration_ms", 0),
             check_time=service_result.get("check_time", ""),
-            check_details=service_result.get("check_details"),
+            ping=service_result.get("ping"),
             error=service_result.get("error")
         )
 
