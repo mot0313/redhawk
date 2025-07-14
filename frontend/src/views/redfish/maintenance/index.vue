@@ -2,6 +2,12 @@
   <div class="app-container">
     <!-- Tab 切换 -->
     <el-tabs v-model="activeTab" @tab-click="handleTabClick">
+
+      <!-- 紧急度规则管理 -->
+      <el-tab-pane label="紧急度规则" name="urgencyRule">
+        <urgency-rule v-if="activeTab === 'urgencyRule'" />
+      </el-tab-pane>
+
       <!-- 业务类型管理 -->
       <el-tab-pane label="业务类型管理" name="businessType">
         <business-type v-if="activeTab === 'businessType'" />
@@ -12,10 +18,7 @@
         <hardware-type v-if="activeTab === 'hardwareType'" />
       </el-tab-pane>
       
-      <!-- 紧急度规则管理 -->
-      <el-tab-pane label="紧急度规则" name="urgencyRule">
-        <urgency-rule v-if="activeTab === 'urgencyRule'" />
-      </el-tab-pane>
+
     </el-tabs>
   </div>
 </template>
