@@ -851,6 +851,7 @@ import {
   batchCheckConnectivity,
   getConnectivityStatistics
 } from '@/api/redfish/connectivity'
+import { ElMessageBox } from "element-plus";
 
 const { proxy } = getCurrentInstance();
 
@@ -1090,18 +1091,37 @@ function handleDelete(row) {
   const deviceIds = row.deviceId || ids.value;
 
   // 获取要删除的设备信息用于确认对话框
-  let confirmMessage = '';
+  let mainMessage = '';
   if (row.deviceId) {
     // 单个删除
-    confirmMessage = `是否确认删除业务IP为"${row.businessIp || '未设置'}"的设备？`;
+    mainMessage = `是否确认删除业务IP为"${row.businessIp || '未设置'}"的设备？`;
   } else {
     // 批量删除
     const selectedDevices = deviceList.value.filter(device => ids.value.includes(device.deviceId));
     const businessIps = selectedDevices.map(device => device.businessIp || '未设置').join('、');
-    confirmMessage = `是否确认删除业务IP为"${businessIps}"的设备？`;
+    mainMessage = `是否确认删除业务IP为"${businessIps}"的设备？`;
   }
 
-  proxy.$modal.confirm(confirmMessage).then(function () {
+  const noteMessage = "注意：删除设备将同时删除该设备的告警信息（不影响历史告警统计数据）。";
+
+  const confirmMessageHTML = `
+    <div>
+      <p style="margin-bottom: 10px;">${mainMessage}</p>
+      <div style="background-color: #fdf6ec; border-left: 5px solid #e6a23c; padding: 8px 15px;">
+        <p style="margin: 0; color: #606266;">${noteMessage}</p>
+      </div>
+    </div>`;
+
+  ElMessageBox.confirm(
+    confirmMessageHTML,
+    "确认删除",
+    {
+      dangerouslyUseHTMLString: true,
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    }
+  ).then(function () {
     return delDevice(deviceIds);
   }).then(() => {
     getList();

@@ -378,11 +378,11 @@ def cleanup_old_logs(days: int = 30) -> Dict[str, Any]:
             AlertInfoDO.status == 'resolved',
             AlertInfoDO.update_time < cutoff_time
         ).delete(synchronize_session=False)
-
+        
         db.commit()
-
+        
         logger.info(f"Successfully deleted {deleted_alerts_count} resolved alerts older than {cutoff_time}")
-
+        
         return {
             "success": True,
             "message": "Cleanup task completed successfully",

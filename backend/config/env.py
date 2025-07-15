@@ -77,7 +77,7 @@ class RedfishSettings(BaseSettings):
     Redfish配置
     """
 
-    redfish_encrypt_key: str = ''
+    redfish_encrypt_key: str = 'Ft4-9LT-WKT-bBq-HXO-wH2-MNv-KQY-GhX-LSq-TZ5-F3s='  # 默认加密密钥
 
 
 class GenSettings:

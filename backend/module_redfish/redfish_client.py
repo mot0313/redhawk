@@ -481,7 +481,7 @@ class RedfishClient:
             return {}
         finally:
             await self.disconnect()
-
+    
     async def get_event_logs(self, log_type: str = "all", max_entries: int = 100,
                            since_entry_id: Optional[str] = None,
                            since_timestamp: Optional[datetime] = None) -> List[Dict[str, Any]]:
@@ -493,7 +493,7 @@ class RedfishClient:
             max_entries: 每个日志服务的最大条目数
             since_entry_id: 从此条目ID后获取日志
             since_timestamp: 从此时间戳后获取日志
-
+            
         Returns:
             List[Dict]: 事件日志列表
         """
@@ -502,18 +502,18 @@ class RedfishClient:
 
 def encrypt_password(password: str) -> str:
     """加密密码"""
-    if RedfishConfig.REDFISH_SECRET_KEY is None:
-        raise ValueError("REDFISH_SECRET_KEY is not set in the environment variables.")
-    key = RedfishConfig.REDFISH_SECRET_KEY.encode()
+    if not RedfishConfig.redfish_encrypt_key:
+        raise ValueError("redfish_encrypt_key is not set in the environment variables.")
+    key = RedfishConfig.redfish_encrypt_key.encode()
     f = Fernet(key)
     encrypted_password = f.encrypt(password.encode())
     return encrypted_password.decode()
 
 def decrypt_password(encrypted_password: str) -> str:
     """解密密码"""
-    if RedfishConfig.REDFISH_SECRET_KEY is None:
-        raise ValueError("REDFISH_SECRET_KEY is not set in the environment variables.")
-    key = RedfishConfig.REDFISH_SECRET_KEY.encode()
+    if not RedfishConfig.redfish_encrypt_key:
+        raise ValueError("redfish_encrypt_key is not set in the environment variables.")
+    key = RedfishConfig.redfish_encrypt_key.encode()
     f = Fernet(key)
     decrypted_password = f.decrypt(encrypted_password.encode())
-    return decrypted_password.decode() 
+    return decrypted_password.decode()

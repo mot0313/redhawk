@@ -58,7 +58,7 @@ class AlertDao:
         
         # 构建查询条件
         conditions = [
-            AlertInfoDO.alert_status != 'deleted'  # 排除已删除的告警
+            AlertInfoDO.del_flag == 0  # 排除逻辑删除的告警
         ]
         
         if query_object.device_id:
@@ -211,7 +211,7 @@ class AlertDao:
         ).join(DeviceInfoDO, AlertInfoDO.device_id == DeviceInfoDO.device_id
         ).where(
             AlertInfoDO.alert_id == alert_id,
-            AlertInfoDO.alert_status != 'deleted'  # 排除已删除的告警
+            AlertInfoDO.del_flag == 0  # 排除逻辑删除的告警
         )
         
         result = await db.execute(query)
@@ -335,14 +335,16 @@ class AlertDao:
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
         
-        # 总告警数
+        # 总告警数 - 移除del_flag条件，统计所有历史告警
         total_result = await db.execute(
             select(func.count(AlertInfoDO.alert_id))
-            .where(AlertInfoDO.first_occurrence >= start_date)
+            .where(
+                AlertInfoDO.first_occurrence >= start_date
+            )
         )
         total_alerts = total_result.scalar() or 0
         
-        # 紧急告警数
+        # 紧急告警数 - 移除del_flag条件，统计所有历史告警
         urgent_result = await db.execute(
             select(func.count(AlertInfoDO.alert_id))
             .where(
@@ -354,7 +356,7 @@ class AlertDao:
         )
         urgent_alerts = urgent_result.scalar() or 0
         
-        # 择期告警数
+        # 择期告警数 - 移除del_flag条件，统计所有历史告警
         scheduled_result = await db.execute(
             select(func.count(AlertInfoDO.alert_id))
             .where(
@@ -366,14 +368,19 @@ class AlertDao:
         )
         scheduled_alerts = scheduled_result.scalar() or 0
         
-        # 活跃告警数
+        # 活跃告警数 - 保留del_flag条件，只统计未删除的活跃告警
         active_result = await db.execute(
             select(func.count(AlertInfoDO.alert_id))
-            .where(AlertInfoDO.alert_status == 'active')
+            .where(
+                and_(
+                    AlertInfoDO.alert_status == 'active',
+                    AlertInfoDO.del_flag == 0
+                )
+            )
         )
         active_alerts = active_result.scalar() or 0
         
-        # 已解决告警数
+        # 已解决告警数 - 移除del_flag条件，统计所有历史告警
         resolved_result = await db.execute(
             select(func.count(AlertInfoDO.alert_id))
             .where(
@@ -421,7 +428,8 @@ class AlertDao:
         ).where(
             and_(
                 AlertInfoDO.urgency_level == 'urgent',
-                AlertInfoDO.alert_status == 'active'
+                AlertInfoDO.alert_status == 'active',
+                AlertInfoDO.del_flag == 0
             )
         ).order_by(desc(AlertInfoDO.first_occurrence)).limit(limit)
         
@@ -472,7 +480,8 @@ class AlertDao:
         ).where(
             and_(
                 AlertInfoDO.urgency_level == 'scheduled',
-                AlertInfoDO.alert_status == 'active'
+                AlertInfoDO.alert_status == 'active',
+                AlertInfoDO.del_flag == 0
             )
         ).order_by(desc(AlertInfoDO.first_occurrence)).limit(limit)
         
@@ -515,7 +524,7 @@ class AlertDao:
             current_date = start_date + timedelta(days=i)
             next_date = current_date + timedelta(days=1)
             
-            # 当日紧急告警数
+            # 当日紧急告警数 - 移除del_flag条件，统计所有历史告警
             urgent_result = await db.execute(
                 select(func.count(AlertInfoDO.alert_id)).where(
                     and_(
@@ -527,7 +536,7 @@ class AlertDao:
             )
             urgent_count = urgent_result.scalar() or 0
             
-            # 当日择期告警数
+            # 当日择期告警数 - 移除del_flag条件，统计所有历史告警
             scheduled_result = await db.execute(
                 select(func.count(AlertInfoDO.alert_id)).where(
                     and_(
@@ -562,7 +571,12 @@ class AlertDao:
         # 按紧急程度分布
         level_result = await db.execute(
             select(AlertInfoDO.urgency_level, func.count(AlertInfoDO.alert_id))
-            .where(AlertInfoDO.alert_status == 'active')
+            .where(
+                and_(
+                    AlertInfoDO.alert_status == 'active',
+                    AlertInfoDO.del_flag == 0
+                )
+            )
             .group_by(AlertInfoDO.urgency_level)
         )
         by_level = {row[0]: row[1] for row in level_result.fetchall()}
@@ -570,7 +584,12 @@ class AlertDao:
         # 按组件类型分布
         component_result = await db.execute(
             select(AlertInfoDO.component_type, func.count(AlertInfoDO.alert_id))
-            .where(AlertInfoDO.alert_status == 'active')
+            .where(
+                and_(
+                    AlertInfoDO.alert_status == 'active',
+                    AlertInfoDO.del_flag == 0
+                )
+            )
             .group_by(AlertInfoDO.component_type)
         )
         by_component = {row[0]: row[1] for row in component_result.fetchall()}
@@ -579,7 +598,12 @@ class AlertDao:
         location_result = await db.execute(
             select(DeviceInfoDO.location, func.count(AlertInfoDO.alert_id))
             .select_from(AlertInfoDO.__table__.join(DeviceInfoDO.__table__, AlertInfoDO.device_id == DeviceInfoDO.device_id))
-            .where(AlertInfoDO.alert_status == 'active')
+            .where(
+                and_(
+                    AlertInfoDO.alert_status == 'active',
+                    AlertInfoDO.del_flag == 0
+                )
+            )
             .group_by(DeviceInfoDO.location)
         )
         by_location = {row[0]: row[1] for row in location_result.fetchall()}
@@ -588,7 +612,12 @@ class AlertDao:
         manufacturer_result = await db.execute(
             select(DeviceInfoDO.manufacturer, func.count(AlertInfoDO.alert_id))
             .select_from(AlertInfoDO.__table__.join(DeviceInfoDO.__table__, AlertInfoDO.device_id == DeviceInfoDO.device_id))
-            .where(AlertInfoDO.alert_status == 'active')
+            .where(
+                and_(
+                    AlertInfoDO.alert_status == 'active',
+                    AlertInfoDO.del_flag == 0
+                )
+            )
             .group_by(DeviceInfoDO.manufacturer)
         )
         by_manufacturer = {row[0]: row[1] for row in manufacturer_result.fetchall()}
@@ -767,7 +796,12 @@ class AlertDao:
             DeviceInfoDO.business_ip,
             DeviceInfoDO.location
         ).join(DeviceInfoDO, AlertInfoDO.device_id == DeviceInfoDO.device_id
-        ).where(AlertInfoDO.maintenance_status != 'none')
+        ).where(
+            and_(
+                AlertInfoDO.maintenance_status != 'none',
+                AlertInfoDO.del_flag == 0
+            )
+        )
         
         # 构建查询条件
         conditions = []
@@ -790,7 +824,12 @@ class AlertDao:
         # 获取总数
         count_query = select(func.count(AlertInfoDO.alert_id)).select_from(
             AlertInfoDO.__table__.join(DeviceInfoDO.__table__, AlertInfoDO.device_id == DeviceInfoDO.device_id)
-        ).where(AlertInfoDO.maintenance_status != 'none')
+        ).where(
+            and_(
+                AlertInfoDO.maintenance_status != 'none',
+                AlertInfoDO.del_flag == 0
+            )
+        )
         if conditions:
             count_query = count_query.where(and_(*conditions))
         
@@ -869,7 +908,8 @@ class AlertDao:
                 and_(
                     AlertInfoDO.scheduled_maintenance_time.isnot(None),
                     AlertInfoDO.scheduled_maintenance_time >= start_datetime,
-                    AlertInfoDO.scheduled_maintenance_time <= end_datetime
+                    AlertInfoDO.scheduled_maintenance_time <= end_datetime,
+                    AlertInfoDO.del_flag == 0
                 )
             ).order_by(asc(AlertInfoDO.scheduled_maintenance_time))
             
@@ -899,12 +939,12 @@ class AlertDao:
             bool: 是否成功
         """
         try:
-            # 逻辑删除：修改状态为deleted
+            # 逻辑删除：修改del_flag
             stmt = update(AlertInfoDO).where(
                 AlertInfoDO.alert_id == alert_id,
-                AlertInfoDO.alert_status != 'deleted'  # 防止重复删除
+                AlertInfoDO.del_flag == 0  # 防止重复删除
             ).values(
-                alert_status='deleted',
+                del_flag=2,
                 resolved_time=datetime.now(),
                 maintenance_notes=delete_reason or '手动删除',
                 update_time=datetime.now()
@@ -939,12 +979,12 @@ class AlertDao:
             int: 成功删除的数量
         """
         try:
-            # 逻辑删除：修改状态为deleted
+            # 逻辑删除：修改del_flag
             stmt = update(AlertInfoDO).where(
                 AlertInfoDO.alert_id.in_(alert_ids),
-                AlertInfoDO.alert_status != 'deleted'  # 防止重复删除
+                AlertInfoDO.del_flag == 0  # 防止重复删除
             ).values(
-                alert_status='deleted',
+                del_flag=2,
                 resolved_time=datetime.now(),
                 maintenance_notes=delete_reason or '批量删除',
                 update_time=datetime.now()
@@ -975,10 +1015,63 @@ class AlertDao:
         try:
             stmt = select(AlertInfoDO).where(
                 AlertInfoDO.alert_id == alert_id,
-                AlertInfoDO.alert_status != 'deleted'  # 排除已删除的告警
+                AlertInfoDO.del_flag == 0  # 排除逻辑删除的告警
             )
             result = await db.execute(stmt)
             return result.scalar_one_or_none()
         except Exception as e:
             logger.error(f"获取告警信息失败: {str(e)}")
             return None 
+
+    @classmethod
+    async def logical_delete_alerts_by_device_ids(cls, db: AsyncSession, device_ids: List[int]) -> int:
+        """
+        根据设备ID列表逻辑删除告警信息
+        
+        Args:
+            db: 数据库会话
+            device_ids: 设备ID列表
+            
+        Returns:
+            int: 更新的记录数
+        """
+        if not device_ids:
+            return 0
+        
+        result = await db.execute(
+            update(AlertInfoDO)
+            .where(
+                and_(
+                    AlertInfoDO.device_id.in_(device_ids),
+                    AlertInfoDO.del_flag == 0  # 只删除未被删除的告警
+                )
+            )
+            .values(
+                del_flag=2,
+                update_time=datetime.now()
+            )
+        )
+        
+        return result.rowcount
+    
+    @classmethod
+    async def physical_delete_alerts_by_device_ids(cls, db: AsyncSession, device_ids: List[int]) -> int:
+        """
+        根据设备ID列表物理删除告警信息（用于设备删除时避免外键约束问题）
+        
+        Args:
+            db: 数据库会话
+            device_ids: 设备ID列表
+            
+        Returns:
+            int: 删除的记录数
+        """
+        if not device_ids:
+            return 0
+        
+        result = await db.execute(
+            delete(AlertInfoDO)
+            .where(AlertInfoDO.device_id.in_(device_ids))
+        )
+        
+        return result.rowcount 

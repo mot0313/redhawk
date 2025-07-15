@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from module_redfish.dao.device_dao import DeviceDao
+from module_redfish.dao.alert_dao import AlertDao
 from module_redfish.entity.do.device_do import DeviceInfoDO
 from module_redfish.entity.vo.device_vo import (
     DevicePageQueryModel, AddDeviceModel, EditDeviceModel, DeleteDeviceModel,
@@ -250,26 +251,37 @@ class DeviceService:
         
         Args:
             db: 数据库会话
-            delete_device: 删除设备信息
+            delete_device: 删除设备模型
             
         Returns:
             ResponseUtil: 响应结果
         """
-        device_ids = [int(id_str) for id_str in delete_device.device_ids.split(',') if id_str]
-        
-        if not device_ids:
-            return ResponseUtil.failure(msg="请选择要删除的设备")
+        device_ids_list = [int(id_str) for id_str in delete_device.device_ids.split(',')]
+        if not device_ids_list:
+            return ResponseUtil.failure(msg="没有提供有效的设备ID")
         
         try:
-            success = await DeviceDao.delete_device(db, device_ids)
-            if success:
-                logger.info(f"成功删除设备: {device_ids}")
-                return ResponseUtil.success(msg="删除设备成功")
+            # 1. 逻辑删除关联的告警（保留告警数据用于统计）
+            deleted_alerts_count = await AlertDao.logical_delete_alerts_by_device_ids(db, device_ids_list)
+            logger.info(f"逻辑删除了 {deleted_alerts_count} 条与待删除设备相关的告警。")
+            
+            # 提交告警逻辑删除的事务
+            await db.commit()
+            
+            # 2. 物理删除设备
+            deleted_devices_count = await DeviceDao.delete_device_by_ids(db, delete_device.device_ids)
+            
+            if deleted_devices_count > 0:
+                logger.info(f"成功物理删除了 {deleted_devices_count} 个设备。")
+                return ResponseUtil.success(msg=f"成功删除 {deleted_devices_count} 个设备，并标记删除了 {deleted_alerts_count} 条相关告警（告警数据已保留用于统计）。")
             else:
-                return ResponseUtil.failure(msg="删除设备失败")
+                await db.rollback()
+                return ResponseUtil.failure(msg="没有设备被删除。")
+                
         except Exception as e:
-            logger.error(f"删除设备失败: {str(e)}")
-            return ResponseUtil.failure(msg="删除设备失败")
+            await db.rollback()
+            logger.error(f"删除设备时发生错误: {str(e)}")
+            return ResponseUtil.failure(msg=f"删除设备时发生错误: {e}")
     
 
     

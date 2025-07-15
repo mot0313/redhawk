@@ -14,7 +14,7 @@ class AlertInfoDO(Base):
     __tablename__ = 'alert_info'
     
     alert_id = Column(BigInteger, primary_key=True, autoincrement=True, comment='告警ID（主键）')
-    device_id = Column(BigInteger, ForeignKey('device_info.device_id'), nullable=False, comment='设备ID（外键关联device_info）')
+    device_id = Column(BigInteger, ForeignKey('device_info.device_id', ondelete='SET NULL'), nullable=True, comment='设备ID（外键关联device_info）')
     component_type = Column(String(50), nullable=False, comment='组件类型（如：CPU/Memory/Storage/Fan/Power/Temperature）')
     component_name = Column(String(100), comment='组件名称（如：CPU1/Memory_DIMM_A1/Fan1）')
     health_status = Column(String(20), nullable=False, comment='健康状态（ok正常/warning警告/unknown未知，critical已合并到warning）')
@@ -25,6 +25,7 @@ class AlertInfoDO(Base):
     resolved_time = Column(DateTime, comment='解决时间')
     create_time = Column(DateTime, default=func.now(), comment='创建时间')
     update_time = Column(DateTime, default=func.now(), onupdate=func.now(), comment='更新时间')
+    del_flag = Column(SmallInteger, default=0, comment='删除标志（0代表存在 2代表删除）')
     
     # 维修时间相关字段
     scheduled_maintenance_time = Column(DateTime, comment='计划维修时间')
@@ -61,4 +62,4 @@ class AlertInfoDO(Base):
         self.urgency_level = value
     
     # 关联关系
-    device = relationship("DeviceInfoDO", back_populates="alerts") 
+    device = relationship("DeviceInfoDO", back_populates="alerts")

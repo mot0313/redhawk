@@ -448,7 +448,8 @@ class DashboardService:
             select(func.count(AlertInfoDO.alert_id)).where(
                 and_(
                     AlertInfoDO.alert_status == 'active',
-                    AlertInfoDO.urgency_level == urgency_level
+                    AlertInfoDO.urgency_level == urgency_level,
+                    AlertInfoDO.del_flag == 0  # 添加del_flag条件，排除逻辑删除的告警
                 )
             )
         )

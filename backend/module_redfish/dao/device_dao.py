@@ -183,23 +183,29 @@ class DeviceDao:
         return True
     
     @classmethod
-    async def delete_device(cls, db: AsyncSession, device_ids: List[int]) -> bool:
+    async def delete_device_by_ids(cls, db: AsyncSession, device_ids: str) -> int:
         """
-        删除设备
+        根据ID列表删除设备
         
         Args:
             db: 数据库会话
-            device_ids: 设备ID列表
+            device_ids: 以逗号分隔的设备ID字符串
             
         Returns:
-            bool: 是否成功
+            int: 删除的记录数
         """
         from sqlalchemy import delete
-        await db.execute(
-            delete(DeviceInfoDO).where(DeviceInfoDO.device_id.in_(device_ids))
+        
+        id_list = [int(id_str) for id_str in device_ids.split(',') if id_str.strip()]
+        if not id_list:
+            return 0
+            
+        result = await db.execute(
+            delete(DeviceInfoDO).where(DeviceInfoDO.device_id.in_(id_list))
         )
         await db.commit()
-        return True
+        
+        return result.rowcount
     
     @classmethod
     async def get_monitoring_devices(cls, db: AsyncSession) -> List[DeviceInfoDO]:

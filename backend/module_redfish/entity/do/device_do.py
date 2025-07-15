@@ -37,5 +37,5 @@ class DeviceInfoDO(Base):
     update_time = Column(DateTime, default=func.now(), onupdate=func.now(), comment='更新时间')
     remark = Column(String(500), comment='备注')
     
-    # 关联关系（注意：这里暂时用字符串引用，避免循环导入）
-    alerts = relationship("AlertInfoDO", back_populates="device") 
+    # 关联关系
+    alerts = relationship("AlertInfoDO", back_populates="device")
