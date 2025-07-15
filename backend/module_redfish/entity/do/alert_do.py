@@ -61,5 +61,4 @@ class AlertInfoDO(Base):
         self.urgency_level = value
     
     # 关联关系
-    device = relationship("DeviceInfoDO", back_populates="alerts")
-    logs = relationship("RedfishAlertLogDO", back_populates="alert") 
+    device = relationship("DeviceInfoDO", back_populates="alerts") 

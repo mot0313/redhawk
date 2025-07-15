@@ -38,5 +38,4 @@ class DeviceInfoDO(Base):
     remark = Column(String(500), comment='备注')
     
     # 关联关系（注意：这里暂时用字符串引用，避免循环导入）
-    alerts = relationship("AlertInfoDO", back_populates="device")
-    logs = relationship("RedfishAlertLogDO", back_populates="device") 
+    alerts = relationship("AlertInfoDO", back_populates="device") 

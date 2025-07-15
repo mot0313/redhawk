@@ -4,7 +4,6 @@ Redfish模块DO层统一入口
 from .base import Base
 from .device_do import DeviceInfoDO
 from .alert_do import AlertInfoDO
-from .alert_log_do import RedfishAlertLogDO
 from .business_urgency_rule_do import BusinessHardwareUrgencyRulesDO
 from .duty_person_do import DutyPersonDO
 from .duty_schedule_do import DutyScheduleDO
@@ -18,7 +17,6 @@ __all__ = [
     # 核心表
     'DeviceInfoDO',
     'AlertInfoDO', 
-    'RedfishAlertLogDO',
     # 附属表
     'BusinessHardwareUrgencyRulesDO',
     'DutyPersonDO',

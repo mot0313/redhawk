@@ -15,7 +15,7 @@ import json
 
 from .device_monitor import DeviceMonitor
 from config.get_db import get_sync_db
-from .entity.do import DeviceInfoDO, AlertInfoDO, RedfishAlertLogDO, BusinessHardwareUrgencyRulesDO
+from .entity.do import DeviceInfoDO, AlertInfoDO, BusinessHardwareUrgencyRulesDO
 from .realtime_service import PushServiceManager
 
 # 导入统一的Celery配置
@@ -358,52 +358,47 @@ def monitor_all_devices() -> Dict[str, Any]:
 @celery_app.task(name='cleanup_old_logs')
 def cleanup_old_logs(days: int = 30) -> Dict[str, Any]:
     """
-    清理旧的日志记录
+    清理旧的日志和告警记录
     
     Args:
-        days: 保留天数，默认30天
+        days (int): 清理多少天前的记录，默认30天
         
     Returns:
         Dict: 清理结果
     """
     try:
-        logger.info(f"Starting cleanup task for logs older than {days} days")
-        
-        # 获取数据库会话
+        logger.info(f"Starting cleanup task for records older than {days} days")
         db = next(get_sync_db())
         
-        # 计算截止时间
         cutoff_time = datetime.now() - timedelta(days=days)
         
-        # 删除旧的日志记录
-        deleted_logs = db.query(RedfishAlertLogDO).filter(
-            RedfishAlertLogDO.occurrence_time < cutoff_time
-        ).delete()
-        
-        # 删除已解决的旧告警记录
-        deleted_alerts = db.query(AlertInfoDO).filter(
-            AlertInfoDO.resolved_time < cutoff_time,
-            AlertInfoDO.alert_status.in_(['resolved', 'closed'])
-        ).delete()
-        
+        # 1. 清理已解决的告警 (alert_info)
+        # 只删除在截止日期前已解决（status='resolved'）且更新时间早于截止时间的告警
+        deleted_alerts_count = db.query(AlertInfoDO).filter(
+            AlertInfoDO.status == 'resolved',
+            AlertInfoDO.update_time < cutoff_time
+        ).delete(synchronize_session=False)
+
         db.commit()
-        
-        logger.info(f"Cleanup completed: {deleted_logs} logs, {deleted_alerts} alerts deleted")
-        
+
+        logger.info(f"Successfully deleted {deleted_alerts_count} resolved alerts older than {cutoff_time}")
+
         return {
             "success": True,
-            "deleted_logs": deleted_logs,
-            "deleted_alerts": deleted_alerts,
-            "cutoff_time": cutoff_time.isoformat()
+            "message": "Cleanup task completed successfully",
+            "deleted_alerts": deleted_alerts_count,
         }
         
     except Exception as e:
-        logger.error(f"Error in cleanup task: {str(e)}")
+        logger.error(f"Error during cleanup task: {str(e)}")
         db.rollback()
         return {
             "success": False,
-            "error": str(e)
+            "message": f"An error occurred: {str(e)}",
+            "deleted_alerts": 0,
         }
+    finally:
+        db.close()
 
 
 def save_monitoring_result(result: Dict[str, Any], device_info: Dict[str, Any]):
