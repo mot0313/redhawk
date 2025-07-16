@@ -5,8 +5,6 @@ from .base import Base
 from .device_do import DeviceInfoDO
 from .alert_do import AlertInfoDO
 from .business_urgency_rule_do import BusinessHardwareUrgencyRulesDO
-from .duty_person_do import DutyPersonDO
-from .duty_schedule_do import DutyScheduleDO
 from .maintenance_schedule_do import MaintenanceScheduleDO
 from .business_type_dict_do import BusinessTypeDictDO
 from .hardware_type_dict_do import HardwareTypeDictDO

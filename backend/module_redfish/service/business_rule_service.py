@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from module_redfish.dao.business_rule_dao import BusinessRuleDao
+from module_redfish.dao.business_rule_dao import BusinessRuleDao, UrgencyRuleDao
 from module_redfish.entity.vo.business_rule_vo import (
     BusinessRulePageQueryModel, AddBusinessRuleModel, EditBusinessRuleModel, DeleteBusinessRuleModel,
     BusinessRuleDetailModel, BusinessRuleModel, BusinessRuleStatisticsModel,
@@ -698,7 +698,7 @@ class BusinessRuleService:
         try:
             from module_redfish.dao.business_rule_dao import UrgencyRuleDao
             from utils.common_util import CamelCaseUtil
-            rule = await UrgencyRuleDao.get_urgency_rule_detail(db, rule_id)
+            rule = await UrgencyRuleDao.get_urgency_rule_by_id(db, rule_id)
             if rule:
                 # 参考device service的转换方式
                 rule_dict = rule.__dict__.copy()
@@ -737,14 +737,14 @@ class BusinessRuleService:
     @classmethod
     async def edit_urgency_rule_services(cls, db: AsyncSession, rule: EditUrgencyRuleModel) -> ResponseUtil:
         """编辑紧急度规则"""
-        existing_rule = await BusinessRuleDao.get_urgency_rule_by_id(db, rule.rule_id)
+        existing_rule = await UrgencyRuleDao.get_urgency_rule_by_id(db, rule.rule_id)
         if not existing_rule:
             return ResponseUtil.failure(msg="规则不存在")
             
         # 检查是否与其他规则冲突
         business_type = rule.business_type or existing_rule.business_type
         hardware_type = rule.hardware_type or existing_rule.hardware_type
-        if await BusinessRuleDao.check_urgency_rule_exists(db, business_type, hardware_type, rule.rule_id):
+        if await UrgencyRuleDao.check_urgency_rule_exists(db, business_type, hardware_type, rule.rule_id):
                     return ResponseUtil.failure(msg="该业务类型和硬件类型的规则已存在")
             
         # 记录旧的规则信息，用于触发任务
@@ -752,7 +752,7 @@ class BusinessRuleService:
         old_hardware_type = existing_rule.hardware_type
 
         try:
-            success = await BusinessRuleDao.edit_urgency_rule(db, rule)
+            success = await UrgencyRuleDao.edit_urgency_rule(db, rule)
             if success:
                 logger.info(f"成功编辑紧急度规则: {rule.rule_id}")
                 
@@ -778,12 +778,12 @@ class BusinessRuleService:
             return ResponseUtil.failure(msg="请选择要删除的规则")
             
         # 在删除前获取规则信息
-        rules_to_delete = await BusinessRuleDao.get_urgency_rules_by_ids(db, rule_ids)
+        rules_to_delete = await UrgencyRuleDao.get_urgency_rules_by_ids(db, rule_ids)
         if not rules_to_delete:
             return ResponseUtil.failure(msg="规则不存在或已被删除")
 
         try:
-            success = await BusinessRuleDao.delete_urgency_rule(db, rule_ids)
+            success = await UrgencyRuleDao.delete_urgency_rule(db, rule_ids)
             if success:
                 logger.info(f"成功删除紧急度规则: {rule_ids}")
 
