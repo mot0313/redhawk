@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 from .redfish_client import RedfishClient, decrypt_password
 from .service.connectivity_service import ConnectivityService
+from .adapters import get_vendor_adaptor
 
 
 class DeviceMonitor:
@@ -75,6 +76,22 @@ class DeviceMonitor:
             
             # 获取所有状态信息
             status_data = await client.get_all_status()
+            # 依据厂商适配并归一化组件结构
+            system_info = status_data.get('system_info') or {}
+            manufacturer = (system_info.get('manufacturer') or system_info.get('Manufacturer') or '').upper()
+            adaptor = get_vendor_adaptor(manufacturer)
+            # 归一化各组件
+            normalized = {
+                'system_info': adaptor.normalize_system(system_info) if system_info else {},
+                'processors': adaptor.normalize_processors(status_data.get('processors', [])),
+                'memory': adaptor.normalize_memory(status_data.get('memory', [])),
+                'storage': adaptor.normalize_storage(status_data.get('storage', [])),
+                'power': adaptor.normalize_power(status_data.get('power', [])),
+            }
+            temps, fans = adaptor.normalize_thermal(status_data.get('temperatures', []), status_data.get('fans', []))
+            normalized['temperatures'] = temps
+            normalized['fans'] = fans
+            status_data = adaptor.postprocess(normalized)
             
             if not status_data:
                 return {
@@ -91,7 +108,7 @@ class DeviceMonitor:
                 "device_id": device_info['device_id'],
                 "success": True,
                 "timestamp": datetime.now().isoformat(),
-                "overall_health": self._calculate_overall_health(status_data),
+                 "overall_health": self._calculate_overall_health(status_data),
                 "alerts": alerts,
                 "all_components": all_components,
                 "raw_data": status_data

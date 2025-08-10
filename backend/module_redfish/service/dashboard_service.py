@@ -270,25 +270,27 @@ class DashboardService:
         
         result = []
         for device in devices[:limit]:
-            # TODO: 实现真实的设备健康状态获取
-            # 这里需要从最新的监控数据中获取设备的健康状态
-            
-            # 暂时使用模拟数据
-            overallHealth = "OK"
-            powerState = "On"
-            processorHealth = "OK"
-            memoryHealth = "OK"
-            storageHealth = "OK"
-            thermalHealth = "OK"
-            powerHealth = "OK"
-            
-            # 获取设备的告警数量
+            # 读取真实的设备健康状态（来自 device_info 表与告警表）
+            overallHealth = (device.health_status or "unknown").lower()
+            # 组件健康：用最近活跃告警推断（有告警则标记 warning，否则 ok）
             deviceAlerts = await AlertService.get_device_alerts_services(db, device.device_id)
             alertCount = len(deviceAlerts)
-            
-            # 设备连接状态
-            connectionStatus = "Connected"  # 暂时硬编码
-            
+
+            def comp_health(component: str) -> str:
+                for a in deviceAlerts:
+                    if a.component_type.lower() in component:
+                        return a.health_status
+                return "ok"
+
+            processorHealth = comp_health("processor")
+            memoryHealth = comp_health("memory")
+            storageHealth = comp_health("storage")
+            thermalHealth = "ok"  # 无专门热告警则视为ok
+            powerHealth = comp_health("power")
+
+            # 设备连接状态基于业务 IP 连通性缓存统计（简化：有业务IP则 Connected，否则 Unknown）
+            connectionStatus = "Connected" if device.business_ip else "Unknown"
+
             result.append(DeviceHealthSummaryListModel(
                 deviceId=device.device_id,
                 hostname=device.hostname,
@@ -297,14 +299,14 @@ class DashboardService:
                 manufacturer=device.manufacturer or "Unknown",
                 model=device.model or "Unknown",
                 overallHealth=overallHealth,
-                powerState=powerState,
+                powerState=device.operating_system or "On",
                 processorHealth=processorHealth,
                 memoryHealth=memoryHealth,
                 storageHealth=storageHealth,
                 thermalHealth=thermalHealth,
                 powerHealth=powerHealth,
                 alertCount=alertCount,
-                lastCheckTime=datetime.now(),  # 暂时使用当前时间
+                lastCheckTime=device.last_check_time or datetime.now(),
                 connectionStatus=connectionStatus
             ))
         
