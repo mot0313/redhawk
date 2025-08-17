@@ -7,7 +7,8 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from module_redfish.entity.do.device_do import DeviceInfoDO
-from module_redfish.entity.do.business_urgency_rule_do import BusinessHardwareUrgencyRulesDO  
+from module_redfish.entity.do.business_urgency_rule_do import BusinessHardwareUrgencyRulesDO
+from module_redfish.utils.component_type_mapper import to_hardware_code
 from module_redfish.entity.do.alert_do import AlertInfoDO
 from utils.log_util import logger
 
@@ -53,13 +54,14 @@ class AlertUrgencyService:
             business_type = device_info.business_type
             hostname = device_info.hostname
             
-            # 2. 根据业务类型和硬件类型查询紧急度规则（支持大小写不敏感匹配）
+            # 2. 归一化组件类型并根据业务类型和硬件类型查询紧急度规则
+            normalized_type = to_hardware_code(component_type, {})
             rule_result = await db.execute(
                 select(BusinessHardwareUrgencyRulesDO)
                 .where(
                     and_(
                         BusinessHardwareUrgencyRulesDO.business_type == business_type,
-                        BusinessHardwareUrgencyRulesDO.hardware_type == component_type.upper(),
+                        BusinessHardwareUrgencyRulesDO.hardware_type == normalized_type.lower(),
                         BusinessHardwareUrgencyRulesDO.is_active == 1
                     )
                 )

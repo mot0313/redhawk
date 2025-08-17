@@ -9,6 +9,7 @@ from loguru import logger
 from .redfish_client import RedfishClient, decrypt_password
 from .service.connectivity_service import ConnectivityService
 from .adapters import get_vendor_adaptor
+from .utils.component_type_mapper import to_hardware_code
 
 
 class DeviceMonitor:
@@ -92,6 +93,22 @@ class DeviceMonitor:
             normalized['temperatures'] = temps
             normalized['fans'] = fans
             status_data = adaptor.postprocess(normalized)
+
+            # 关键统计日志（帮助排查未落库/未识别问题）
+            try:
+                logger.info(
+                    "Redfish normalized summary | host={} manufacturer={} proc={} mem={} storage={} power={} temp={} fan={}",
+                    device_info.get('hostname') or device_info.get('oob_ip'),
+                    manufacturer or 'Unknown',
+                    len(status_data.get('processors', [])),
+                    len(status_data.get('memory', [])),
+                    len(status_data.get('storage', [])),
+                    len(status_data.get('power', [])),
+                    len(status_data.get('temperatures', [])),
+                    len(status_data.get('fans', []))
+                )
+            except Exception:
+                pass
             
             if not status_data:
                 return {
@@ -186,6 +203,7 @@ class DeviceMonitor:
         if system_info:
             component_status, alert = self._analyze_system_health(device_info, system_info)
             if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], system_info)
                 all_components.append(component_status)
             if alert:
                 alerts.append(alert)
@@ -195,24 +213,90 @@ class DeviceMonitor:
         for processor in processors:
             component_status, alert = self._analyze_processor_health(device_info, processor)
             if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], processor)
                 all_components.append(component_status)
             if alert:
                 alerts.append(alert)
         
         # 分析内存状态
         memory_modules = status_data.get('memory', [])
+        try:
+            # 采样前3条DIMM，记录名称与健康，便于对比check_redfish
+            for idx, m in enumerate(memory_modules[:3]):
+                hs, st = self._get_component_status(m)
+                name = m.get('device_locator') or m.get('name') or m.get('id') or f"DIMM#{idx}"
+                logger.info("Memory sample [{}] name={} health={} state={}", idx, name, hs, st)
+        except Exception:
+            pass
         for memory in memory_modules:
             component_status, alert = self._analyze_memory_health(device_info, memory)
             if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], memory)
                 all_components.append(component_status)
             if alert:
                 alerts.append(alert)
+        try:
+            mem_comp = [c for c in all_components if c.get('component_type') == 'memory']
+            mem_bad = [c for c in mem_comp if c.get('health_status') in ('warning', 'critical')]
+            logger.info("Memory analyzed | components={} abnormal={}", len(mem_comp), len(mem_bad))
+        except Exception:
+            pass
+
+        # MemorySummary 兜底（方案A）：若DIMM未触发异常且汇总健康为告警，则追加聚合内存告警（Fujitsu 例外）
+        try:
+            sys_info_norm = status_data.get('system_info', {}) or {}
+            raw_pre = sys_info_norm.get('raw', {}) or {}
+            # 兼容多种字段名
+            manufacturer = (
+                raw_pre.get('Manufacturer')
+                or raw_pre.get('manufacturer')
+                or sys_info_norm.get('manufacturer')
+                or ''
+            )
+            is_fujitsu = isinstance(manufacturer, str) and 'FUJITSU' in manufacturer.upper()
+            # DIMM 是否已有异常
+            dimm_has_issue = any(
+                (comp.get('component_type') in ('memory', 'MEMORY')) and (comp.get('health_status') in ('warning', 'critical'))
+                for comp in all_components
+            )
+            if not dimm_has_issue and not is_fujitsu:
+                # 优先使用系统原始原生数据中的 MemorySummary
+                sys_raw_data = raw_pre.get('raw_data') or raw_pre
+                # 也兼容已提取的 memory_summary 字段
+                mem_summary = (sys_raw_data.get('MemorySummary')
+                               or sys_info_norm.get('memory_summary')
+                               or {})
+                mem_status = (mem_summary.get('Status') or {})
+                # HealthRollup 优先，其次 Health
+                rollup = mem_status.get('HealthRollup') or mem_status.get('Health')
+                if rollup in ('Warning', 'Critical'):
+                    logger.info("MemorySummary fallback triggered | manufacturer={} rollup={}", manufacturer or 'Unknown', rollup)
+                    summary_component = {
+                        "component_type": to_hardware_code("memory", {}),
+                        "component_name": "MemorySummary",
+                        "health_status": self._normalize_health_status(rollup)
+                    }
+                    all_components.append(summary_component)
+                    alerts.append({
+                        "device_id": device_info['device_id'],
+                        "alert_source": "redfish",
+                        "component_type": summary_component["component_type"],
+                        "component_name": "MemorySummary",
+                        "health_status": summary_component["health_status"],
+                        "urgency_level": self._map_health_to_urgency_level(rollup),
+                        "alert_message": f"Memory summary health issue: {rollup}",
+                        "first_occurrence": datetime.now(),
+                        "raw_data": json.dumps({"MemorySummary": mem_summary})
+                    })
+        except Exception as e:
+            logger.warning(f"MemorySummary fallback failed: {e}")
         
         # 分析存储状态
         storage_devices = status_data.get('storage', [])
         for storage in storage_devices:
             component_status, alert = self._analyze_storage_health(device_info, storage)
             if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], storage)
                 all_components.append(component_status)
             if alert:
                 alerts.append(alert)
@@ -222,6 +306,7 @@ class DeviceMonitor:
         for power in power_supplies:
             component_status, alert = self._analyze_power_health(device_info, power)
             if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], power)
                 all_components.append(component_status)
             if alert:
                 alerts.append(alert)
@@ -231,6 +316,7 @@ class DeviceMonitor:
         for temp in temperatures:
             component_status, alert = self._analyze_temperature_health(device_info, temp)
             if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], temp)
                 all_components.append(component_status)
             if alert:
                 alerts.append(alert)
@@ -240,6 +326,7 @@ class DeviceMonitor:
         for fan in fans:
             component_status, alert = self._analyze_fan_health(device_info, fan)
             if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], fan)
                 all_components.append(component_status)
             if alert:
                 alerts.append(alert)
@@ -305,7 +392,14 @@ class DeviceMonitor:
     def _analyze_memory_health(self, device_info: Dict[str, Any], memory: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
         """分析内存健康状态，返回组件状态和告警"""
         health_status, state = self._get_component_status(memory)
-        memory_name = memory.get('device_locator', memory.get('id', 'Unknown'))
+        # 兼容适配器归一化后的字段（component_name），以及 Redfish 原生字段
+        memory_name = (
+            memory.get('component_name')
+            or memory.get('device_locator')
+            or memory.get('name')
+            or memory.get('id')
+            or 'Unknown'
+        )
         
         if state == 'Absent':
             return None, None

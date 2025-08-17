@@ -17,6 +17,7 @@ from .device_monitor import DeviceMonitor
 from config.get_db import get_sync_db
 from .entity.do import DeviceInfoDO, AlertInfoDO, BusinessHardwareUrgencyRulesDO
 from .realtime_service import PushServiceManager
+from .utils.component_type_mapper import to_hardware_code
 
 # 导入统一的Celery配置
 from .celery_config import celery_app
@@ -439,7 +440,25 @@ def save_monitoring_result(result: Dict[str, Any], device_info: Dict[str, Any]):
 
         # 2. 状态对比与逻辑处理
         all_monitored_components = result.get('all_components', [])
-        monitored_components_map = {(comp['component_type'], comp['component_name']): comp for comp in all_monitored_components}
+        # 统一将内部 component_type 转为硬件字典码（小写）
+        normalized_components = []
+        for comp in all_monitored_components:
+            ct = to_hardware_code(comp.get('component_type'), comp)
+            nc = comp.copy()
+            nc['component_type'] = ct
+            normalized_components.append(nc)
+        monitored_components_map = {(comp['component_type'], comp['component_name']): comp for comp in normalized_components}
+
+        # 监控统计日志：记录各类型异常数量（帮助定位如memory未入库问题）
+        try:
+            type_bad_counts = {}
+            for c in normalized_components:
+                if c.get('health_status') != 'ok':
+                    key = c.get('component_type') or 'unknown'
+                    type_bad_counts[key] = type_bad_counts.get(key, 0) + 1
+            logger.info(f"Monitored abnormal components by type: {type_bad_counts}")
+        except Exception:
+            pass
         
         alerts_to_create = []
         alerts_to_resolve = []
@@ -452,10 +471,14 @@ def save_monitoring_result(result: Dict[str, Any], device_info: Dict[str, Any]):
             existing_alert = active_alerts_map.get(alert_key)
             
             if health_status != 'ok':
+                try:
+                    logger.info(f"Evaluating alert create/update | type={component_type} name={component_name} health={health_status}")
+                except Exception:
+                    pass
                 # 组件状态异常
                 if not existing_alert:
                     # 情况1: 新告警
-                    urgency_level = urgency_rules_map.get((business_type, component_type), 'scheduled')
+                    urgency_level = urgency_rules_map.get((business_type, component_type.lower()), 'scheduled')
                     
                     new_alert = AlertInfoDO(
                     device_id=device_id,
@@ -778,10 +801,10 @@ def recalculate_urgency_for_rule_change(business_type: str, hardware_type: str):
         rules_query = db.query(BusinessHardwareUrgencyRulesDO).filter(BusinessHardwareUrgencyRulesDO.is_active == 1).all()
         urgency_rules_map = {(rule.business_type, rule.hardware_type.lower()): rule.urgency_level for rule in rules_query}
 
-        # 3. 查找所有匹配设备和硬件类型的活跃告警
+        # 3. 查找所有匹配设备和硬件类型的活跃告警（等值小写）
         alerts_to_update = db.query(AlertInfoDO).filter(
             AlertInfoDO.device_id.in_(device_ids),
-            AlertInfoDO.component_type.ilike(hardware_type),
+            AlertInfoDO.component_type == hardware_type.lower(),
             AlertInfoDO.alert_status == 'active'
         ).all()
 

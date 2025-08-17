@@ -314,20 +314,38 @@ class DeviceService:
             # 解密密码
             decrypted_password = decrypt_password(device.redfish_password)
             
-            # 创建Redfish客户端
+            # 创建Redfish客户端（测试连接使用更短超时，避免前端10s axios超时）
             client = RedfishClient(
                 host=device.oob_ip,
                 username=device.redfish_username,
                 password=decrypted_password,
-                port=device.oob_port
+                port=device.oob_port,
+                timeout=6
             )
             
-            # 尝试连接
-            success = await client.connect()
+            # 尝试连接（再加一层总超时保护）
+            try:
+                success = await asyncio.wait_for(client.connect(), timeout=6)
+            except asyncio.TimeoutError:
+                logger.warning("Redfish connect timeout (8s) during test_device_connection_by_id")
+                return DeviceConnectionResult(
+                    success=False,
+                    message="连接测试失败",
+                    system_info=None
+                )
             
             if success:
-                # 获取系统信息
-                system_info = await client.get_system_info()
+                # 获取系统信息（同样增加总超时保护）
+                try:
+                    system_info = await asyncio.wait_for(client.get_system_info(), timeout=6)
+                except asyncio.TimeoutError:
+                    logger.warning("Redfish get_system_info timeout (8s) during test_device_connection_by_id")
+                    await client.disconnect()
+                    return DeviceConnectionResult(
+                        success=False,
+                        message="连接测试失败",
+                        system_info=None
+                    )
                 await client.disconnect()
                 
                 return DeviceConnectionResult(
@@ -338,14 +356,14 @@ class DeviceService:
             else:
                 return DeviceConnectionResult(
                     success=False,
-                    message="连接失败，请检查IP地址、用户名和密码",
+                    message="连接测试失败",
                     system_info=None
                 )
         except Exception as e:
             logger.error(f"测试设备连接失败 (设备ID: {device_id}): {str(e)}")
             return DeviceConnectionResult(
                 success=False,
-                message=f"连接测试异常: {str(e)}",
+                message="连接测试失败",
                 system_info=None
             )
     
