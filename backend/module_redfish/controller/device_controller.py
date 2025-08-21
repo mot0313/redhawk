@@ -18,6 +18,8 @@ from module_redfish.entity.vo.device_vo import (
     DeviceStatsResponseModel
 )
 from module_redfish.service.device_service import DeviceService
+from module_redfish.service.device_connection_service import DeviceConnectionService
+from module_redfish.service.device_import_service import DeviceImportService
 from utils.response_util import ResponseUtil
 from utils.page_util import PageResponseModel
 from utils.log_util import logger
@@ -174,7 +176,7 @@ async def test_device_connection_by_id(
         if not device_id:
             return ResponseUtil.failure(msg='缺少设备ID参数')
         
-        connection_result = await DeviceService.test_device_connection_by_id_services(query_db, device_id)
+        connection_result = await DeviceConnectionService.test_device_connection_by_id_services(query_db, device_id)
         logger.info(f'测试设备连接 (设备ID: {device_id})')
         
         if connection_result.success:
@@ -247,7 +249,7 @@ async def batch_import_device(
 ):
     """批量导入设备"""
     try:
-        batch_import_result = await DeviceService.batch_import_device_services(
+        batch_import_result = await DeviceImportService.batch_import_device_services(
             request, query_db, file, update_support, current_user
         )
         logger.info(batch_import_result.message)
@@ -269,7 +271,7 @@ async def export_device_list(
         device_query_result = await DeviceService.get_device_list_services(
             query_db, device_page_query, is_page=False
         )
-        device_export_result = await DeviceService.export_device_list_services(device_query_result)
+        device_export_result = await DeviceImportService.export_device_list_services(device_query_result)
         logger.info('导出设备列表成功')
         return ResponseUtil.streaming(data=bytes2file_response(device_export_result))
     except Exception as e:
@@ -281,7 +283,7 @@ async def export_device_list(
 async def export_device_import_template(request: Request):
     """下载设备导入模板"""
     try:
-        device_import_template_result = await DeviceService.get_device_import_template_services()
+        device_import_template_result = await DeviceImportService.get_device_import_template_services()
         logger.info('获取设备导入模板成功')
         return ResponseUtil.streaming(data=bytes2file_response(device_import_template_result))
     except Exception as e:

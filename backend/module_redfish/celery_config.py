@@ -54,6 +54,8 @@ def make_celery():
         task_routes={
             'monitor_single_device': {'queue': 'monitoring'},
             'monitor_all_devices': {'queue': 'batch'},
+            'check_device_availability': {'queue': 'availability'},
+            'check_all_devices_availability': {'queue': 'availability'},
             'cleanup_old_logs': {'queue': 'maintenance'},
         },
         
@@ -63,25 +65,12 @@ def make_celery():
             Queue('default', routing_key='default'),
             Queue('monitoring', routing_key='monitoring'),
             Queue('batch', routing_key='batch'),
+            Queue('availability', routing_key='availability'),
             Queue('maintenance', routing_key='maintenance'),
         ),
         
-        # Beat调度配置
-        beat_schedule={
-            # 每5分钟执行一次全设备监控
-            'monitor-all-devices': {
-                'task': 'monitor_all_devices',
-                'schedule': 300.0,  # 5分钟
-                'options': {'queue': 'batch'}
-            },
-            # 每2小时清理一次旧日志
-            'cleanup-old-logs': {
-                'task': 'cleanup_old_logs',
-                'schedule': 7200.0,  # 2小时
-                'kwargs': {'days': 30},
-                'options': {'queue': 'maintenance'}
-            },
-        },
+
+        beat_schedule={},
         beat_schedule_filename='celerybeat-schedule',
         
         # 监控配置
@@ -111,6 +100,26 @@ def make_celery():
                     'interval_start': 300,
                     'interval_step': 300,
                     'interval_max': 600,
+                }
+            },
+            'check_device_availability': {
+                'rate_limit': '100/m',  # 单设备可用性检测限制
+                'time_limit': 60,  # 1分钟超时
+                'soft_time_limit': 45,  # 45秒软超时
+                'retry_policy': {
+                    'max_retries': 3,
+                    'interval_start': 30,
+                    'interval_step': 30,
+                    'interval_max': 120,
+                }
+            },
+            'check_all_devices_availability': {
+                'rate_limit': '1/m',  # 批量可用性检测限制
+                'retry_policy': {
+                    'max_retries': 2,
+                    'interval_start': 120,
+                    'interval_step': 120,
+                    'interval_max': 300,
                 }
             }
         }

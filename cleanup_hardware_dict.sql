@@ -19,6 +19,7 @@ WHERE type_code NOT IN (
     'network',          -- --nic: network interface -> network
     'bmc',              -- --bmc: BMC info -> bmc
     'firmware',         -- --firmware: firmware info -> firmware
+    'connectivity',     -- 设备连通性/可用性检测
     'unknown'           -- 兜底类型
 );
 
@@ -72,6 +73,11 @@ WHERE NOT EXISTS (SELECT 1 FROM hardware_type_dict WHERE type_code = 'bmc');
 INSERT INTO hardware_type_dict (type_code, type_name, type_description, category, sort_order, is_active, create_by, create_time, update_by, update_time)
 SELECT 'firmware', '固件版本', '系统固件信息监控', 'management', 42, 1, 'system', NOW(), '', NOW()
 WHERE NOT EXISTS (SELECT 1 FROM hardware_type_dict WHERE type_code = 'firmware');
+
+-- Connectivity (设备宕机检测)
+INSERT INTO hardware_type_dict (type_code, type_name, type_description, category, sort_order, is_active, create_by, create_time, update_by, update_time)
+SELECT 'downtime', '宕机检测', '设备网络连通性和宕机状态监控', 'availability', 50, 1, 'system', NOW(), '', NOW()
+WHERE NOT EXISTS (SELECT 1 FROM hardware_type_dict WHERE type_code = 'downtime');
 
 -- Unknown (兜底类型)
 INSERT INTO hardware_type_dict (type_code, type_name, type_description, category, sort_order, is_active, create_by, create_time, update_by, update_time)

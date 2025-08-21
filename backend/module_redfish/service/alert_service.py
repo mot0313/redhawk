@@ -81,7 +81,7 @@ class AlertService:
         
         return AlertDetailResponseModel.create(alert=alert)
     
-    # 精简版移除手动解决和忽略告警功能，告警状态由监控系统自动管理
+
     
     @classmethod
     async def get_alert_statistics_services(cls, db: AsyncSession, days: int = 7):
@@ -234,7 +234,7 @@ class AlertService:
                 component_name,
                 health_status,
                 alert_message,
-                alert_level
+                urgency_level
             )
             return alert.alert_id
         except Exception as e:
@@ -390,7 +390,7 @@ class AlertService:
             if batch_maintenance.maintenance_notes is not None:
                 maintenance_data['maintenance_notes'] = batch_maintenance.maintenance_notes
             
-            # 移除audit字段，直接调用DAO方法
+
             updated_count = await AlertDao.batch_schedule_maintenance(
                 db, 
                 batch_maintenance.alert_ids, 

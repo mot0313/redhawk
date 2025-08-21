@@ -7,9 +7,9 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from loguru import logger
 from .redfish_client import RedfishClient, decrypt_password
-from .service.connectivity_service import ConnectivityService
-from .adapters import get_vendor_adaptor
-from .utils.component_type_mapper import to_hardware_code
+from ..service.connectivity_service import ConnectivityService
+from ..adapters import get_vendor_adaptor
+from ..utils.component_type_mapper import to_hardware_code
 
 
 class DeviceMonitor:
@@ -31,7 +31,7 @@ class DeviceMonitor:
             "power": "power",
             "temperatures": "temperature",
             "fans": "fan",
-            "connectivity": "connectivity"
+            "connectivity": "downtime"
         }
     
     def _get_component_status(self, component_data: Dict[str, Any]) -> Tuple[str, str]:
@@ -167,7 +167,7 @@ class DeviceMonitor:
                 health_status = 'OK' if is_online else 'Critical'
                 
                 component_status = {
-                    "component_type": "connectivity",
+                    "component_type": to_hardware_code("downtime", {}),
                     "component_name": "宕机",
                     "health_status": self._normalize_health_status(health_status)
                 }
@@ -177,12 +177,12 @@ class DeviceMonitor:
                 if not is_online:
                     alert_entry = {
                         "device_id": device_info['device_id'],
-                        "alert_source": "connectivity",
-                        "component_type": "connectivity",
+                        "alert_source": "downtime_detection",
+                        "component_type": to_hardware_code("downtime", {}),
                         "component_name": "宕机",
                         "health_status": self._normalize_health_status(health_status),
                         "urgency_level": self._map_health_to_urgency_level(health_status),
-                        "alert_message": f"Device business IP {business_ip} is unreachable: {connectivity_result.get('error', 'Connection failed')}",
+                        "alert_message": f"设备宕机告警: 业务IP {business_ip} 无法连通 - {connectivity_result.get('error', '连接失败')}",
                         "first_occurrence": datetime.now(),
                         "raw_data": json.dumps(connectivity_result)
                     }
@@ -192,7 +192,7 @@ class DeviceMonitor:
                 logger.error(f"Error checking business IP connectivity for {business_ip}: {str(e)}")
                 # 连通性检查失败时，记录为未知状态
                 component_status = {
-                    "component_type": "connectivity",
+                    "component_type": to_hardware_code("downtime", {}),
                     "component_name": "宕机",
                     "health_status": "unknown"
                 }

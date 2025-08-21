@@ -16,11 +16,13 @@ _BASIC_MAP = {
     "fan": "fan",                 # --fan: 风扇
     "temperature": "temperature", # --temp: 温度传感器
     # 扩展映射
-    "system": "system",      # --info: 系统信息 -> 主板
-    "connectivity": "network",    # --nic: 网络接口
-    "network": "network",
+    "system": "system",           # --info: 系统信息
+    "network": "network",         # --nic: 网络接口
     "bmc": "bmc",                 # --bmc: BMC管理器
     "firmware": "firmware",       # --firmware: 固件信息
+    "connectivity": "downtime",     # 连通性 -> downtime
+    "availability": "downtime",     # 设备可用性 -> downtime
+    "downtime": "downtime",         # 宕机检测
 }
 
 

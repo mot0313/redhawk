@@ -79,7 +79,7 @@ class WebSocketManager:
                     await self.leave_room(user_id, room)
                 del self.user_rooms[user_id]
             
-            # 移除连接
+
             if user_id in self.active_connections:
                 del self.active_connections[user_id]
             

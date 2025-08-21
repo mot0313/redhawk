@@ -318,7 +318,7 @@ class AlertDao:
             logger.error(f"创建或更新告警失败: {str(e)}")
             raise
     
-    # 精简版移除手动解决告警功能，告警状态由监控系统自动管理
+
     
     @classmethod
     async def get_alert_statistics(cls, db: AsyncSession, days: int = 7) -> Dict[str, int]:
@@ -398,7 +398,7 @@ class AlertDao:
             'scheduled_alerts': scheduled_alerts,
             'active_alerts': active_alerts,
             'resolved_alerts': resolved_alerts,
-            'ignored_alerts': 0  # 精简版移除忽略功能，设为0
+            'ignored_alerts': 0
         }
     
     @classmethod
@@ -1074,4 +1074,31 @@ class AlertDao:
             .where(AlertInfoDO.device_id.in_(device_ids))
         )
         
-        return result.rowcount 
+
+    
+    @classmethod
+    async def get_device_alerts(cls, db: AsyncSession, device_id: int) -> List[AlertInfoDO]:
+        """
+        获取设备的活跃告警
+        
+        Args:
+            db: 数据库会话
+            device_id: 设备ID
+            
+        Returns:
+            List[AlertInfoDO]: 告警列表
+        """
+        try:
+            query = select(AlertInfoDO).where(
+                and_(
+                    AlertInfoDO.device_id == device_id,
+                    AlertInfoDO.alert_status == 'active'
+                )
+            ).order_by(AlertInfoDO.create_time.desc())
+            
+            result = await db.execute(query)
+            return result.scalars().all()
+            
+        except Exception as e:
+            logger.error(f"获取设备告警失败: {str(e)}")
+            return []

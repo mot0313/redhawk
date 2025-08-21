@@ -219,7 +219,7 @@ class AlertPageResponseModel(BaseModel):
         """创建告警分页响应模型"""
         alert_models = []
         for alert in alerts:
-            # 移除SQLAlchemy的内部状态
+
             if hasattr(alert, '__dict__'):
                 alert_dict = alert.__dict__.copy()
                 alert_dict.pop('_sa_instance_state', None)

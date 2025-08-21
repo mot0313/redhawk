@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Union, Optional, Literal
-# 删除validation decorator，使用Pydantic自动验证
+from pydantic_validation_decorator import ValidateFields
 from config.get_db import get_db
 from config.enums import BusinessType
 from module_admin.annotation.log_annotation import Log
@@ -88,12 +88,6 @@ async def get_alert_detail(
     except Exception as e:
         logger.error(f'获取告警详情失败: {str(e)}')
         return ResponseUtil.failure(msg='获取告警详情失败')
-
-
-# 精简版移除手动覆盖功能
-
-
-# 精简版移除手动解决和忽略告警功能，告警状态由监控系统自动管理
 
 
 @alertController.get('/statistics', response_model=AlertStatsResponseModel, dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:list'))])
@@ -192,6 +186,7 @@ async def get_device_alerts(
 
 
 @alertController.post('/schedule-maintenance', dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:maintenance'))])
+@ValidateFields(validate_model='schedule_maintenance')
 @Log(title='告警维修计划', business_type=BusinessType.INSERT)
 async def schedule_maintenance(
     request: Request,
@@ -210,6 +205,7 @@ async def schedule_maintenance(
 
 
 @alertController.put('/update-maintenance', dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:maintenance'))])
+@ValidateFields(validate_model='update_maintenance')
 @Log(title='告警维修计划', business_type=BusinessType.UPDATE)
 async def update_maintenance(
     request: Request,
@@ -228,6 +224,7 @@ async def update_maintenance(
 
 
 @alertController.put('/batch-schedule-maintenance', dependencies=[Depends(CheckUserInterfaceAuth('redfish:alert:maintenance'))])
+@ValidateFields(validate_model='batch_schedule_maintenance')
 @Log(title='告警维修计划', business_type=BusinessType.UPDATE)
 async def batch_schedule_maintenance(
     request: Request,

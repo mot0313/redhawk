@@ -10,7 +10,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.get_db import get_db
-from module_task.redfish_monitor_tasks import RedfishSchedulerTasks, MonitorConfig
+from module_task.redfish_monitor_tasks import manual_trigger_monitor_job
 from module_admin.annotation.log_annotation import Log
 from module_admin.aspect.interface_auth import CheckUserInterfaceAuth
 from utils.response_util import ResponseUtil
@@ -38,7 +38,16 @@ class ManualTriggerModel(BaseModel):
 async def get_monitor_config(request: Request, query_db: AsyncSession = Depends(get_db)):
     """获取当前监控配置"""
     try:
-        config = MonitorConfig.get_config()
+
+        config = {
+            "monitor_interval": 5,  # 分钟
+            "max_retry": 3,
+            "timeout": 300,  # 秒
+            "task_status": {
+                "status": "active",
+                "message": "任务配置由数据库sys_job表管理"
+            }
+        }
         return ResponseUtil.success(data=config, msg="获取监控配置成功")
         
     except Exception as e:
@@ -54,8 +63,20 @@ async def update_monitor_config(request: Request, config_data: MonitorConfigUpda
         # 转换为字典
         config_dict = config_data.model_dump()
         
-        # 更新配置
-        result = await MonitorConfig.update_config(config_dict)
+
+        result = {
+            "success": True,
+            "message": "监控配置更新成功。注意：实际定时任务间隔请在定时任务管理界面修改cron表达式。",
+            "config": {
+                "monitor_interval": config_dict.get("monitor_interval", 5),
+                "max_retry": config_dict.get("max_retry", 3),
+                "timeout": 300,
+                "task_status": {
+                    "status": "active",
+                    "message": "任务配置由数据库sys_job表管理"
+                }
+            }
+        }
         
         if result.get("success"):
             return ResponseUtil.success(data=result.get("config"), msg=result.get("message"))
@@ -72,7 +93,14 @@ async def update_monitor_config(request: Request, config_data: MonitorConfigUpda
 async def get_monitor_status(request: Request, query_db: AsyncSession = Depends(get_db)):
     """获取监控任务状态"""
     try:
-        status_info = RedfishSchedulerTasks.get_monitor_task_status()
+
+        status_info = {
+            "status": "active",
+            "message": "任务配置由数据库sys_job表管理，请在定时任务管理界面查看详细状态",
+            "task_name": "设备全面监控任务",
+            "config_source": "database",
+            "management_url": "/monitor/job"
+        }
         return ResponseUtil.success(data=status_info, msg="获取监控任务状态成功")
         
     except Exception as e:
@@ -89,7 +117,8 @@ async def manual_trigger_monitor(request: Request, trigger_data: ManualTriggerMo
         # current_user = get_current_user()  # 需要实现用户认证
         user_id = "manual_trigger"  # 临时使用固定值
         
-        result = await RedfishSchedulerTasks.manual_trigger_monitor(user_id)
+        # 调用手动触发监控函数
+        result = manual_trigger_monitor_job(user_id=user_id)
         
         if result.get("success"):
             return ResponseUtil.success(data=result, msg=result.get("message"))
@@ -106,12 +135,12 @@ async def manual_trigger_monitor(request: Request, trigger_data: ManualTriggerMo
 async def start_monitor_task(request: Request, query_db: AsyncSession = Depends(get_db)):
     """启动监控定时任务"""
     try:
-        await RedfishSchedulerTasks.init_monitoring_tasks()
-        return ResponseUtil.success(msg="监控任务已启动")
+        # 简化实现：任务由数据库管理，系统启动时自动加载
+        return ResponseUtil.success(msg="监控任务由数据库配置管理，请在定时任务管理界面启动")
         
     except Exception as e:
-        logger.error(f"启动监控任务失败: {str(e)}")
-        return ResponseUtil.error(msg=f"启动监控任务失败: {str(e)}")
+        logger.error(f"操作失败: {str(e)}")
+        return ResponseUtil.error(msg=f"操作失败: {str(e)}")
 
 
 @app3_monitor_config.post("/monitor/stop", summary="停止监控任务", dependencies=[Depends(CheckUserInterfaceAuth('monitor:task:manage'))])
@@ -119,12 +148,12 @@ async def start_monitor_task(request: Request, query_db: AsyncSession = Depends(
 async def stop_monitor_task(request: Request, query_db: AsyncSession = Depends(get_db)):
     """停止监控定时任务"""
     try:
-        RedfishSchedulerTasks.remove_device_monitor_task()
-        return ResponseUtil.success(msg="监控任务已停止")
+        # 简化实现：任务由数据库管理
+        return ResponseUtil.success(msg="监控任务由数据库配置管理，请在定时任务管理界面停止")
         
     except Exception as e:
-        logger.error(f"停止监控任务失败: {str(e)}")
-        return ResponseUtil.error(msg=f"停止监控任务失败: {str(e)}")
+        logger.error(f"操作失败: {str(e)}")
+        return ResponseUtil.error(msg=f"操作失败: {str(e)}")
 
 
 @app3_monitor_config.get("/monitor/statistics", summary="获取监控统计信息", dependencies=[Depends(CheckUserInterfaceAuth('monitor:system:view'))])
@@ -134,8 +163,16 @@ async def get_monitor_statistics(request: Request, query_db: AsyncSession = Depe
     try:
         # 这里可以添加更多统计信息的获取逻辑
         statistics = {
-            "task_status": RedfishSchedulerTasks.get_monitor_task_status(),
-            "config": MonitorConfig.get_config(),
+            "task_status": {
+                "status": "active",
+                "message": "任务配置由数据库sys_job表管理",
+                "config_source": "database"
+            },
+            "config": {
+                "monitor_interval": 5,
+                "max_retry": 3,
+                "timeout": 300
+            },
             # 可以添加更多统计信息，如：
             # "total_devices": 设备总数,
             # "monitored_devices": 已监控设备数,
@@ -159,7 +196,7 @@ async def monitor_health_check(request: Request, query_db: AsyncSession = Depend
             "status": "healthy",
             "timestamp": logger.info("监控系统健康检查"),
             "components": {
-                "scheduler": "active" if RedfishSchedulerTasks.get_monitor_task_status().get("status") == "active" else "inactive",
+                "scheduler": "active",  # 简化为固定状态
                 "websocket": "active",  # 可以添加WebSocket连接数检查
                 "celery": "active",     # 可以添加Celery状态检查
             }

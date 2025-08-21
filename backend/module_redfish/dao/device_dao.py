@@ -150,7 +150,7 @@ class DeviceDao:
         """
         db_device = DeviceInfoDO(**device.model_dump())
         db.add(db_device)
-        await db.commit()
+        await db.flush()  # 获取ID但不提交事务
         await db.refresh(db_device)
         return db_device
     
@@ -179,7 +179,7 @@ class DeviceDao:
         for field, value in update_data.items():
             setattr(db_device, field, value)
         
-        await db.commit()
+        # 事务由服务层统一管理，这里不提交
         return True
     
     @classmethod

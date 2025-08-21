@@ -63,12 +63,13 @@ start_beat() {
 # 函数：启动Flower监控
 start_flower() {
     echo "启动Flower监控界面..."
-    python3 -m celery -A module_redfish.celery_config flower \
-        --port=5555 \
+    python3 -m celery -A module_redfish.celery_config \
         --broker=redis://$REDIS_HOST:$REDIS_PORT/$REDIS_DB_BROKER \
+        flower \
+        --port=5555 \
         --logfile=$LOG_DIR/flower.log \
         --pidfile=$LOG_DIR/flower.pid \
-        --detach \
+        --detach
     
     if [ $? -eq 0 ]; then
         echo "Flower监控界面启动成功，访问地址: http://localhost:5555"

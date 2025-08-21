@@ -7,7 +7,7 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime
 
-from module_redfish.device_monitor import DeviceMonitor
+from module_redfish.core.device_monitor import DeviceMonitor
 from module_redfish.service.connectivity_service import ConnectivityService
 
 

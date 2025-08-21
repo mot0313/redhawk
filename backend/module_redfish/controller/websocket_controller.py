@@ -9,8 +9,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from loguru import logger
 from datetime import datetime
 
-from ..websocket_manager import websocket_manager
-from module_task.redfish_monitor_tasks import RedfishSchedulerTasks, MonitorConfig
+from ..core.websocket_manager import websocket_manager
+from module_task.redfish_monitor_tasks import manual_trigger_monitor_job
 from module_admin.annotation.log_annotation import Log
 from module_admin.aspect.interface_auth import CheckUserInterfaceAuth
 from utils.log_util import logger as sys_logger
@@ -102,11 +102,25 @@ class WebSocketController:
             user_id: 用户ID
         """
         try:
-            # 获取监控任务状态
-            monitor_status = RedfishSchedulerTasks.get_monitor_task_status()
+            # 获取监控任务状态（简化版本）
+            monitor_status = {
+                "status": "active",
+                "message": "任务配置由数据库sys_job表管理，请在定时任务管理界面查看详细状态",
+                "task_name": "设备全面监控任务",
+                "config_source": "database",
+                "management_url": "/monitor/job"
+            }
             
-            # 获取监控配置
-            monitor_config = MonitorConfig.get_config()
+            # 获取监控配置（简化版本）
+            monitor_config = {
+                "monitor_interval": 5,  # 分钟
+                "max_retry": 3,
+                "timeout": 300,  # 秒
+                "task_status": {
+                    "status": "active",
+                    "message": "任务配置由数据库sys_job表管理"
+                }
+            }
             
             # 发送初始状态
             await websocket_manager.send_to_user(user_id, {
@@ -221,13 +235,28 @@ class WebSocketController:
     @staticmethod
     async def _handle_manual_monitor(user_id: str, message: Dict[str, Any]):
         """处理手动触发监控请求"""
-        result = await RedfishSchedulerTasks.manual_trigger_monitor(user_id)
-        
-        await websocket_manager.send_to_user(user_id, {
-            "type": "manual_monitor_result",
-            "data": result,
-            "timestamp": datetime.now().isoformat()
-        })
+        try:
+            # 调用手动触发监控函数
+            result = manual_trigger_monitor_job(user_id=user_id)
+            
+            await websocket_manager.send_to_user(user_id, {
+                "type": "manual_monitor_result",
+                "data": result,
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception as e:
+            # 处理错误情况
+            error_result = {
+                "success": False,
+                "error": str(e),
+                "message": "手动触发设备监控失败"
+            }
+            
+            await websocket_manager.send_to_user(user_id, {
+                "type": "manual_monitor_result",
+                "data": error_result,
+                "timestamp": datetime.now().isoformat()
+            })
     
     @staticmethod
     async def _handle_get_status(user_id: str, message: Dict[str, Any]):

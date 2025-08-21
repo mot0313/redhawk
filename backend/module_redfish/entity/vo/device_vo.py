@@ -2,7 +2,7 @@
 设备管理VO模型
 """
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from pydantic.alias_generators import to_camel
 from module_admin.annotation.pydantic_annotation import as_query
@@ -131,6 +131,16 @@ class DeviceDetailModel(BaseModel):
     connection_status: Optional[str] = Field(default=None, description="连接状态")
 
 
+class DeviceHealthStatusModel(BaseModel):
+    """简单的设备健康状态模型（用于内部状态计算）"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
+    overall_status: str = Field(..., description="整体健康状态")
+    components: Dict[str, Any] = Field(default_factory=dict, description="组件状态详情")
+    last_check_time: Optional[datetime] = Field(default=None, description="最后检查时间")
+    alert_count: int = Field(default=0, description="告警数量")
+
+
 class DeviceHealthModel(BaseModel):
     """设备健康状态模型"""
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
@@ -211,7 +221,7 @@ class DevicePageResponseModel(BaseModel):
         """创建设备分页响应模型"""
         device_models = []
         for device in devices:
-            # 移除SQLAlchemy的内部状态
+
             device_dict = device.copy()
             device_dict.pop('_sa_instance_state', None)
             device_models.append(DeviceResponseModel(**device_dict))

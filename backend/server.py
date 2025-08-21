@@ -31,8 +31,8 @@ from module_redfish.controller.dashboard_controller import dashboardController
 from module_redfish.controller.connectivity_controller import connectivityController
 from module_redfish.controller.websocket_controller import WebSocketController
 from module_redfish.controller.monitor_config_controller import app3_monitor_config
-from module_redfish.websocket_manager import init_websocket_manager, cleanup_websocket_manager
-from module_task.redfish_monitor_tasks import RedfishSchedulerTasks
+from module_redfish.core.websocket_manager import init_websocket_manager, cleanup_websocket_manager
+# RedfishSchedulerTasks已迁移到APScheduler，由数据库管理
 from sub_applications.handle import handle_sub_applications
 from utils.common_util import worship
 from utils.log_util import logger
@@ -52,8 +52,8 @@ async def lifespan(app: FastAPI):
     # 初始化WebSocket管理器
     await init_websocket_manager()
     
-    # 初始化Redfish监控任务
-    await RedfishSchedulerTasks.init_monitoring_tasks()
+    # Redfish监控任务现在由APScheduler管理，从数据库sys_job表自动加载
+    logger.info("Redfish监控任务由APScheduler从数据库加载，无需手动初始化")
     
     logger.info(f'{AppConfig.app_name}启动成功')
     yield
