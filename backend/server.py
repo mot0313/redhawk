@@ -26,7 +26,8 @@ from module_generator.controller.gen_controller import genController
 from module_redfish.controller.device_controller import deviceController
 from module_redfish.controller.alert_controller import alertController
 from module_redfish.controller.business_rule_controller import businessRuleController
-from module_redfish.controller.dashboard_controller import dashboardController 
+from module_redfish.controller.dashboard_controller import dashboardController
+from module_redfish.controller.redfish_log_controller import redfishLogController 
 
 from module_redfish.controller.connectivity_controller import connectivityController
 from module_redfish.controller.websocket_controller import WebSocketController
@@ -52,8 +53,8 @@ async def lifespan(app: FastAPI):
     # 初始化WebSocket管理器
     await init_websocket_manager()
     
-    # Redfish监控任务现在由APScheduler管理，从数据库sys_job表自动加载
-    logger.info("Redfish监控任务由APScheduler从数据库加载，无需手动初始化")
+    # Redfish监控任务和日志清理任务现在由APScheduler管理，从数据库sys_job表自动加载
+    logger.info("Redfish相关定时任务由APScheduler从数据库加载，无需手动初始化")
     
     logger.info(f'{AppConfig.app_name}启动成功')
     yield
@@ -103,6 +104,7 @@ controller_list = [
     {'router': alertController, 'tags': ['Redfish-告警管理']},
     {'router': businessRuleController, 'tags': ['Redfish-规则管理']},
     {'router': dashboardController, 'tags': ['Redfish-首页数据']},
+    {'router': redfishLogController, 'tags': ['Redfish-日志管理']},
 
     {'router': connectivityController, 'tags': ['Redfish-连通性检测']},
     {'router': app3_monitor_config, 'tags': ['Redfish-监控配置']},

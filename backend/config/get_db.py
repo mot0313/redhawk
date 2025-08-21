@@ -25,6 +25,16 @@ def get_sync_db():
         db.close()
 
 
+async def get_db_for_task():
+    """
+    获取异步数据库会话（用于定时任务）
+    
+    :return:
+    """
+    async with AsyncSessionLocal() as current_db:
+        yield current_db
+
+
 async def init_create_table():
     """
     应用启动时初始化数据库连接

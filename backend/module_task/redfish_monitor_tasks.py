@@ -344,6 +344,96 @@ async def _broadcast_downtime_check_error(error_message: str):
 快速部署：
 1. 执行 cleanup_hardware_dict.sql（添加downtime硬件类型）
 2. 执行 add_downtime_monitor_jobs.sql（添加定时任务）
-3. 重启应用（自动加载任务）
-4. 访问 /monitor/job 查看任务状态
-""" 
+3. 执行 init_redfish_log_management.sql（添加日志管理）
+4. 重启应用（自动加载任务）
+5. 访问 /monitor/job 查看任务状态
+"""
+
+
+# ================================================================================
+# Redfish 日志清理任务
+# ================================================================================
+
+def redfish_log_cleanup_job(*args, **kwargs):
+    """
+    Redfish日志清理定时任务执行函数
+    该函数会被APScheduler调用，任务配置由sys_job表管理
+    每天凌晨2点执行，清理30天前的日志记录
+    
+    Args:
+        *args: 位置参数（来自sys_job.job_args）
+        **kwargs: 关键字参数（来自sys_job.job_kwargs）
+    """
+    try:
+        logger.info("开始执行Redfish日志清理定时任务")
+        logger.info(f"接收到的参数 - args: {args}, kwargs: {kwargs}")
+        
+        # 记录任务执行时间
+        execution_time = datetime.now()
+        
+        # 执行异步清理任务
+        result = asyncio.run(_async_cleanup_redfish_logs())
+        
+        # 计算执行时间
+        duration = (datetime.now() - execution_time).total_seconds()
+        
+        if result['success']:
+            logger.info(f"Redfish日志清理任务执行成功: {result['message']}, 耗时: {duration:.2f}秒")
+        else:
+            logger.error(f"Redfish日志清理任务执行失败: {result['message']}")
+            
+        return result
+        
+    except Exception as e:
+        error_msg = f"Redfish日志清理任务执行异常: {str(e)}"
+        logger.error(error_msg)
+        return {
+            'success': False,
+            'message': error_msg,
+            'cleaned_count': 0
+        }
+
+
+async def _async_cleanup_redfish_logs():
+    """
+    异步执行日志清理
+    
+    Returns:
+        Dict: 清理结果
+    """
+    try:
+        # 导入必要的模块
+        from config.get_db import get_db_for_task
+        from module_redfish.service.redfish_log_service import RedfishLogService
+        
+        # 获取数据库会话
+        async for db in get_db_for_task():
+            try:
+                # 清理30天前的日志
+                cleanup_result = await RedfishLogService.cleanup_old_logs_services(db, days=30)
+                
+                return {
+                    'success': cleanup_result.success,
+                    'message': cleanup_result.message,
+                    'cleaned_count': cleanup_result.cleaned_count
+                }
+                
+            except Exception as e:
+                logger.error(f"日志清理异常: {str(e)}")
+                await db.rollback()
+                return {
+                    'success': False,
+                    'message': f'日志清理异常: {str(e)}',
+                    'cleaned_count': 0
+                }
+            finally:
+                await db.close()
+                break
+                
+    except Exception as e:
+        logger.error(f"日志清理启动失败: {str(e)}")
+        return {
+            'success': False,
+            'message': f'日志清理启动失败: {str(e)}',
+            'cleaned_count': 0
+        } 

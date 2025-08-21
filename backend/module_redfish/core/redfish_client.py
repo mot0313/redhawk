@@ -484,7 +484,8 @@ class RedfishClient:
     
     async def get_event_logs(self, log_type: str = "all", max_entries: int = 100,
                            since_entry_id: Optional[str] = None,
-                           since_timestamp: Optional[datetime] = None) -> List[Dict[str, Any]]:
+                           since_timestamp: Optional[datetime] = None,
+                           deduplicate: bool = True) -> List[Dict[str, Any]]:
         """
         获取事件日志
         
@@ -493,11 +494,192 @@ class RedfishClient:
             max_entries: 每个日志服务的最大条目数
             since_entry_id: 从此条目ID后获取日志
             since_timestamp: 从此时间戳后获取日志
+            deduplicate: 是否去重相同消息内容的日志
             
         Returns:
             List[Dict]: 事件日志列表
         """
-        return []
+        try:
+            if not self.session_active:
+                await self.connect()
+            
+            all_logs = []
+            
+            # 获取系统事件日志 (SEL)
+            if log_type in ["sel", "all"]:
+                sel_logs = await self._get_system_event_logs(max_entries, since_entry_id, since_timestamp)
+                all_logs.extend(sel_logs)
+            
+            # 获取管理事件日志 (MEL)
+            if log_type in ["mel", "all"]:
+                mel_logs = await self._get_manager_event_logs(max_entries, since_entry_id, since_timestamp)
+                all_logs.extend(mel_logs)
+            
+            # 按时间排序
+            all_logs.sort(key=lambda x: x.get("created", ""), reverse=True)
+            
+            # 可选：去重逻辑（保留最新的重复消息）
+            if deduplicate:
+                all_logs = self._deduplicate_logs(all_logs)
+            
+            return all_logs[:max_entries] if max_entries > 0 else all_logs
+            
+        except Exception as e:
+            logger.error(f"Error getting event logs from {self.host}: {str(e)}")
+            return []
+    
+    async def _get_system_event_logs(self, max_entries: int = 100,
+                                   since_entry_id: Optional[str] = None,
+                                   since_timestamp: Optional[datetime] = None) -> List[Dict[str, Any]]:
+        """获取系统事件日志"""
+        logs = []
+        try:
+            # 获取系统URI
+            systems_response = self.client.get("/redfish/v1/Systems")
+            if systems_response.status != 200:
+                return logs
+            
+            for system_member in systems_response.dict.get("Members", []):
+                system_uri = system_member["@odata.id"]
+                
+                # 获取日志服务
+                log_services_uri = f"{system_uri}/LogServices"
+                log_services_response = self.client.get(log_services_uri)
+                
+                if log_services_response.status != 200:
+                    continue
+                
+                # 遍历日志服务
+                for log_service_member in log_services_response.dict.get("Members", []):
+                    log_service_uri = log_service_member["@odata.id"]
+                    
+                    # 获取日志条目
+                    entries_uri = f"{log_service_uri}/Entries"
+                    entries_response = self.client.get(entries_uri)
+                    
+                    if entries_response.status == 200:
+                        entries_data = entries_response.dict
+                        for entry in entries_data.get("Members", []):
+                            log_entry = self._parse_log_entry(entry, "SEL")
+                            if self._should_include_log(log_entry, since_entry_id, since_timestamp):
+                                logs.append(log_entry)
+            
+        except Exception as e:
+            logger.error(f"Error getting system event logs: {str(e)}")
+        
+        return logs
+    
+    async def _get_manager_event_logs(self, max_entries: int = 100,
+                                    since_entry_id: Optional[str] = None,
+                                    since_timestamp: Optional[datetime] = None) -> List[Dict[str, Any]]:
+        """获取管理事件日志"""
+        logs = []
+        try:
+            # 获取管理器URI
+            managers_response = self.client.get("/redfish/v1/Managers")
+            if managers_response.status != 200:
+                return logs
+            
+            for manager_member in managers_response.dict.get("Members", []):
+                manager_uri = manager_member["@odata.id"]
+                
+                # 获取日志服务
+                log_services_uri = f"{manager_uri}/LogServices"
+                log_services_response = self.client.get(log_services_uri)
+                
+                if log_services_response.status != 200:
+                    continue
+                
+                # 遍历日志服务
+                for log_service_member in log_services_response.dict.get("Members", []):
+                    log_service_uri = log_service_member["@odata.id"]
+                    
+                    # 获取日志条目
+                    entries_uri = f"{log_service_uri}/Entries"
+                    entries_response = self.client.get(entries_uri)
+                    
+                    if entries_response.status == 200:
+                        entries_data = entries_response.dict
+                        for entry in entries_data.get("Members", []):
+                            log_entry = self._parse_log_entry(entry, "MEL")
+                            if self._should_include_log(log_entry, since_entry_id, since_timestamp):
+                                logs.append(log_entry)
+            
+        except Exception as e:
+            logger.error(f"Error getting manager event logs: {str(e)}")
+        
+        return logs
+    
+    def _parse_log_entry(self, entry_data: Dict[str, Any], log_source: str) -> Dict[str, Any]:
+        """解析日志条目"""
+        # 标准化严重程度格式
+        severity = entry_data.get("Severity", "OK")
+        if severity:
+            severity = str(severity).upper()
+        
+        return {
+            "id": entry_data.get("Id", ""),
+            "name": entry_data.get("Name", ""),
+            "entry_type": entry_data.get("EntryType", ""),
+            "severity": severity,
+            "created": entry_data.get("Created", ""),
+            "message": entry_data.get("Message", ""),
+            "message_id": entry_data.get("MessageId", ""),
+            "message_args": entry_data.get("MessageArgs", []),
+            "entry_code": entry_data.get("EntryCode", ""),
+            "sensor_type": entry_data.get("SensorType", ""),
+            "sensor_number": entry_data.get("SensorNumber", 0),
+            "log_source": log_source,  # SEL 或 MEL
+            "raw_data": entry_data
+        }
+    
+    def _should_include_log(self, log_entry: Dict[str, Any], 
+                          since_entry_id: Optional[str] = None,
+                          since_timestamp: Optional[datetime] = None) -> bool:
+        """判断是否应该包含此日志条目"""
+        # 轻量版只保留Critical和Warning级别
+        severity = log_entry.get("severity", "").upper()
+        if severity not in ["CRITICAL", "WARNING"]:
+            return False
+            
+        # 根据条目ID过滤
+        if since_entry_id and log_entry.get("id", "") <= since_entry_id:
+            return False
+            
+        # 根据时间戳过滤
+        if since_timestamp:
+            try:
+                created_str = log_entry.get("created", "")
+                if created_str:
+                    # 尝试解析时间戳并转换为无时区datetime
+                    parsed_time = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                    created_time = parsed_time.replace(tzinfo=None)
+                    if since_timestamp and created_time <= since_timestamp:
+                        return False
+            except Exception:
+                pass  # 如果时间解析失败，仍然包含此条目
+                
+        return True
+    
+    def _deduplicate_logs(self, logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        去重日志：对于相同消息内容，只保留最新的一条
+        与check_redfish保持一致的行为
+        """
+        seen_messages = {}
+        deduped_logs = []
+        
+        # 已按时间排序（最新的在前），遍历时遇到重复消息就跳过
+        for log in logs:
+            message = log.get("message", "")
+            if message and message in seen_messages:
+                continue  # 跳过重复的消息
+            
+            if message:
+                seen_messages[message] = True
+            deduped_logs.append(log)
+        
+        return deduped_logs
 
 
 def encrypt_password(password: str) -> str:
