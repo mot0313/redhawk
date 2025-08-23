@@ -1,5 +1,11 @@
 <template>
   <div class="app-container">
+    <!-- 页面标题 -->
+    <div class="page-header mb-4">
+      <h2 class="page-title">📚 历史日志管理</h2>
+      <p class="page-desc">管理和查询已保存的设备日志记录，支持批量操作和定时收集任务。日志自动保留30天，过期自动清理。</p>
+    </div>
+
     <!-- 搜索条件 -->
     <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="68px">
       <el-form-item label="设备IP" prop="deviceIp">
@@ -156,14 +162,10 @@
           <span>{{ scope.row.message || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="传感器类型" align="center" prop="sensorType" width="120">
-        <template #default="scope">
-          <span>{{ scope.row.sensorType || '-' }}</span>
-        </template>
-      </el-table-column>
+
       <el-table-column label="创建时间" align="center" prop="createdTime" width="180">
         <template #default="scope">
-          <span>{{ parseTime(scope.row.createdTime, '{y}-{m}-{d} {h}:{i}:{s}') }}</span>
+          <span>{{ formatCreatedTime(scope.row.createdTime) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="收集时间" align="center" prop="collectedTime" width="180">
@@ -215,11 +217,14 @@
           <el-switch v-model="collectForm.forceRefresh" />
           <span class="ml-2 text-sm text-gray-500">开启后将收集所有日志，否则只收集新增日志</span>
         </el-form-item>
+
       </el-form>
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="collectCancel">取 消</el-button>
-          <el-button type="primary" @click="collectSubmit" :loading="collectLoading">确 定</el-button>
+          <el-button type="primary" @click="collectSubmit" :loading="collectLoading">
+            收集并保存
+          </el-button>
         </div>
       </template>
     </el-dialog>
@@ -242,11 +247,11 @@
       </template>
     </el-dialog>
 
+
     <!-- 日志详情对话框 -->
     <el-dialog title="日志详情" v-model="detailOpen" width="800px" append-to-body>
       <el-descriptions :column="2" border>
-        <el-descriptions-item label="日志ID">{{ logDetail.logId }}</el-descriptions-item>
-        <el-descriptions-item label="设备ID">{{ logDetail.deviceId }}</el-descriptions-item>
+        <el-descriptions-item label="主机名">{{ logDetail.hostname || '-' }}</el-descriptions-item>
         <el-descriptions-item label="设备IP">{{ logDetail.deviceIp }}</el-descriptions-item>
         <el-descriptions-item label="日志来源">{{ logDetail.logSource }}</el-descriptions-item>
         <el-descriptions-item label="严重程度">
@@ -255,10 +260,8 @@
           <el-tag v-else type="info">{{ logDetail.severity }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="条目类型">{{ logDetail.entryType || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="消息ID">{{ logDetail.messageId || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="传感器类型">{{ logDetail.sensorType || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="传感器编号">{{ logDetail.sensorNumber || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{ parseTime(logDetail.createdTime) }}</el-descriptions-item>
+        <el-descriptions-item label="条目ID">{{ logDetail.entryId || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ formatCreatedTime(logDetail.createdTime) }}</el-descriptions-item>
         <el-descriptions-item label="收集时间">{{ parseTime(logDetail.collectedTime) }}</el-descriptions-item>
         <el-descriptions-item label="创建者">{{ logDetail.createBy || '-' }}</el-descriptions-item>
         <el-descriptions-item label="消息内容" span="2">
@@ -266,7 +269,14 @@
             {{ logDetail.message || '-' }}
           </div>
         </el-descriptions-item>
-        <el-descriptions-item label="备注" span="2">{{ logDetail.remark || '-' }}</el-descriptions-item>
+
+        <el-descriptions-item label="原始日志数据" span="2">
+          <div v-if="logDetail.remark" 
+               style="max-height: 300px; overflow-y: auto; word-break: break-all; background: #f5f7fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 11px; white-space: pre-wrap;">
+            {{ formatJsonString(logDetail.remark) }}
+          </div>
+          <div v-else>暂无原始日志数据</div>
+        </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
   </div>
@@ -507,6 +517,54 @@ function cleanupSubmit() {
   });
 }
 
+/** 检查字符串是否为JSON格式 */
+function isJsonString(str) {
+  try {
+    JSON.parse(str);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** 格式化JSON字符串 */
+function formatJsonString(str) {
+  try {
+    const obj = JSON.parse(str);
+    return JSON.stringify(obj, null, 2);
+  } catch (e) {
+    return str;
+  }
+}
+
+/** 检查时间是否有效 */
+function isValidTime(timeStr) {
+  if (!timeStr) return false;
+  
+  // 检查特殊的无效时间标识
+  const invalidPatterns = [
+    '1900-01-01',
+    '0000-00-00',
+    '1970-01-01'
+  ];
+  
+  for (const pattern of invalidPatterns) {
+    if (timeStr.startsWith(pattern)) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+/** 格式化创建时间显示 */
+function formatCreatedTime(timeStr) {
+  if (!timeStr || !isValidTime(timeStr)) {
+    return '未知时间';
+  }
+  return parseTime(timeStr);
+}
+
 onMounted(() => {
   getList();
   getStatistics();
@@ -514,6 +572,30 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.page-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 0 0 8px 0;
+}
+
+.page-desc {
+  font-size: 14px;
+  margin: 0;
+  opacity: 0.9;
+}
+
+.mb-4 {
+  margin-bottom: 16px;
+}
+
 .box-card {
   margin-bottom: 10px;
 }

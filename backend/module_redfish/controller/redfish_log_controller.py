@@ -15,7 +15,7 @@ from module_admin.service.login_service import LoginService
 from module_redfish.entity.vo.redfish_log_vo import (
     RedfishLogPageQueryModel, RedfishLogDetailModel, DeviceLogCollectModel,
     RedfishLogPageResponseModel, RedfishLogStatsModel, RedfishLogCollectResultModel,
-    RedfishLogCleanupResultModel
+    RedfishLogCleanupResultModel, RedfishLogTempCollectResultModel
 )
 from module_redfish.service.redfish_log_service import RedfishLogService
 from utils.response_util import ResponseUtil
@@ -28,15 +28,36 @@ redfishLogController = APIRouter(prefix='/redfish/log', dependencies=[Depends(Lo
 @redfishLogController.get(
     '/list', 
     response_model=RedfishLogPageResponseModel, 
-    dependencies=[Depends(CheckUserInterfaceAuth('redfish:log:list'))]
+    dependencies=[Depends(CheckUserInterfaceAuth(['redfish:log:list', 'redfish:log:history']))]
 )
 async def get_redfish_log_list(
     request: Request,
-    query_model: RedfishLogPageQueryModel = Depends(RedfishLogPageQueryModel.as_query),
+    device_id: Optional[int] = Query(None, description="设备ID", alias="deviceId"),
+    device_ip: Optional[str] = Query(None, description="设备IP地址", alias="deviceIp"),
+    log_source: Optional[str] = Query(None, description="日志来源", alias="logSource"),
+    severity: Optional[str] = Query(None, description="严重程度"),
+    message_keyword: Optional[str] = Query(None, description="消息关键词", alias="messageKeyword"),
+    start_time: Optional[str] = Query(None, description="开始时间", alias="startTime"),
+    end_time: Optional[str] = Query(None, description="结束时间", alias="endTime"),
+    page_num: int = Query(1, ge=1, description="页码", alias="pageNum"),
+    page_size: int = Query(10, ge=1, le=100, description="每页数量", alias="pageSize"),
     query_db: AsyncSession = Depends(get_db)
 ):
     """获取日志列表"""
     try:
+        # 构建查询模型
+        query_model = RedfishLogPageQueryModel.as_query(
+            device_id=device_id,
+            device_ip=device_ip,
+            log_source=log_source,
+            severity=severity,
+            message_keyword=message_keyword,
+            start_time=start_time,
+            end_time=end_time,
+            page_num=page_num,
+            page_size=page_size
+        )
+        
         log_page_query_result = await RedfishLogService.get_redfish_log_list_services(
             query_db, query_model, is_page=True
         )
@@ -91,10 +112,8 @@ async def get_redfish_log_detail(
 
 @redfishLogController.post(
     '/collect', 
-    response_model=RedfishLogCollectResultModel,
-    dependencies=[Depends(CheckUserInterfaceAuth('redfish:log:collect'))]
+    dependencies=[Depends(CheckUserInterfaceAuth(['redfish:log:collect', 'redfish:log:temp:collect', 'redfish:log:history:view']))]
 )
-@Log(title='日志管理', business_type=BusinessType.OTHER)
 async def collect_device_logs(
     request: Request,
     collect_request: DeviceLogCollectModel,
@@ -103,6 +122,15 @@ async def collect_device_logs(
 ):
     """收集设备日志"""
     try:
+        # 临时收集模式不记录操作日志，直接处理
+        if collect_request.no_storage:
+            collect_result = await RedfishLogService.collect_device_logs_services(
+                query_db, collect_request, current_user.user.user_name
+            )
+            logger.info(f'临时日志收集完成: {collect_result.message}')
+            return ResponseUtil.success(data=collect_result)
+        
+        # 常规收集模式：手动记录操作日志，因为@Log装饰器会记录完整响应
         collect_result = await RedfishLogService.collect_device_logs_services(
             query_db, collect_request, current_user.user.user_name
         )
@@ -111,6 +139,32 @@ async def collect_device_logs(
     except Exception as e:
         logger.error(f'收集设备日志失败: {str(e)}')
         return ResponseUtil.failure(msg='收集设备日志失败')
+
+
+@redfishLogController.get(
+    '/device/list',
+    dependencies=[Depends(CheckUserInterfaceAuth(['redfish:log:temp', 'redfish:log:history', 'redfish:log:collect']))]
+)
+async def get_devices_for_log(
+    request: Request,
+    query_db: AsyncSession = Depends(get_db)
+):
+    """获取设备列表（用于日志收集）"""
+    try:
+        from module_redfish.service.device_service import DeviceService
+        from module_redfish.entity.vo.device_vo import DevicePageQueryModel
+        
+        # 创建查询对象，获取所有设备
+        query_object = DevicePageQueryModel(page_size=1000)
+        device_page_result = await DeviceService.get_device_list_services(
+            query_db, query_object, is_page=True
+        )
+        
+        logger.info('获取日志收集设备列表成功')
+        return ResponseUtil.success(data=device_page_result)
+    except Exception as e:
+        logger.error(f'获取日志收集设备列表失败: {str(e)}')
+        return ResponseUtil.failure(msg='获取设备列表失败')
 
 
 @redfishLogController.post(

@@ -11,13 +11,50 @@ from module_redfish.entity.do.redfish_log_do import RedfishLogDO
 from module_redfish.entity.vo.redfish_log_vo import (
     RedfishLogQueryModel, AddRedfishLogModel, RedfishLogModel, 
     RedfishLogDetailModel, RedfishLogStatsModel, DeviceLogCollectModel,
-    RedfishLogCollectResultModel, RedfishLogCleanupResultModel
+    RedfishLogCollectResultModel, RedfishLogCleanupResultModel,
+    RedfishLogTempCollectResultModel
 )
 from module_redfish.core.redfish_client import RedfishClient, decrypt_password
 from module_admin.entity.vo.common_vo import CrudResponseModel
 from utils.response_util import ResponseUtil
 from utils.page_util import PageResponseModel, PageUtil
 from utils.log_util import logger
+
+
+def is_valid_timestamp(timestamp_str: str) -> bool:
+    """
+    检查时间戳是否有效
+    
+    Args:
+        timestamp_str: 时间戳字符串
+        
+    Returns:
+        bool: 时间戳是否有效
+    """
+    if not timestamp_str:
+        return False
+    
+    # 检查常见的无效时间格式
+    invalid_patterns = [
+        "0000-00-00",
+        "1900-01-01", 
+        "1970-01-01T00:00:00"
+    ]
+    
+    for pattern in invalid_patterns:
+        if timestamp_str.startswith(pattern):
+            return False
+    
+    try:
+        # 尝试解析时间
+        from datetime import datetime
+        parsed_time = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        # 检查年份是否合理（1990年以后）
+        if parsed_time.year < 1990:
+            return False
+        return True
+    except:
+        return False
 
 
 class RedfishLogService:
@@ -80,7 +117,12 @@ class RedfishLogService:
             if not log_do:
                 raise ValueError("日志不存在")
             
-            return cls._convert_do_to_detail_vo(log_do)
+            # 获取设备信息以获取主机名
+            from module_redfish.dao.device_dao import DeviceDao
+            device_do = await DeviceDao.get_device_by_id(db, log_do.device_id)
+            hostname = device_do.hostname if device_do else None
+            
+            return cls._convert_do_to_detail_vo(log_do, hostname)
             
         except ValueError:
             raise
@@ -110,7 +152,7 @@ class RedfishLogService:
     @classmethod
     async def collect_device_logs_services(cls, db: AsyncSession, 
                                           collect_request: DeviceLogCollectModel,
-                                          operator: str) -> RedfishLogCollectResultModel:
+                                          operator: str):
         """
         收集设备日志
         
@@ -120,9 +162,34 @@ class RedfishLogService:
             operator: 操作者
             
         Returns:
-            收集结果
+            收集结果（根据no_storage参数返回不同类型）
         """
         try:
+            # 临时收集模式：只支持单设备收集
+            if collect_request.no_storage:
+                if not collect_request.device_id:
+                    return RedfishLogTempCollectResultModel(
+                        success=False,
+                        message="临时收集模式必须指定设备ID"
+                    )
+                
+                # 获取设备信息
+                device = await DeviceDao.get_device_by_id(db, collect_request.device_id)
+                if not device:
+                    return RedfishLogTempCollectResultModel(
+                        success=False,
+                        message="未找到指定设备"
+                    )
+                
+                # 临时收集单设备日志
+                return await cls._collect_single_device_logs_temp(
+                    device=device,
+                    log_type=collect_request.log_type,
+                    max_entries=collect_request.max_entries,
+                    force_refresh=collect_request.force_refresh
+                )
+            
+            # 常规收集模式（原有逻辑）
             # 获取要收集的设备列表
             if collect_request.device_id:
                 devices = await DeviceDao.get_device_by_id(db, collect_request.device_id)
@@ -243,15 +310,27 @@ class RedfishLogService:
                 entry_id = log_entry.get('id', '')
                 created_time_str = log_entry.get('created', '')
                 
-                if not entry_id or not created_time_str:
+                if not entry_id:
                     continue
                 
-                try:
-                    # 解析时间并转换为无时区的datetime（数据库使用TIMESTAMP WITHOUT TIME ZONE）
-                    parsed_time = datetime.fromisoformat(created_time_str.replace("Z", "+00:00"))
-                    created_time = parsed_time.replace(tzinfo=None)
-                except:
-                    created_time = datetime.now()
+                # 处理创建时间
+                created_time = None
+                is_time_valid = False
+                
+                if created_time_str and is_valid_timestamp(created_time_str):
+                    try:
+                        # 解析有效时间并转换为无时区的datetime
+                        parsed_time = datetime.fromisoformat(created_time_str.replace("Z", "+00:00"))
+                        created_time = parsed_time.replace(tzinfo=None)
+                        is_time_valid = True
+                    except:
+                        pass
+                
+                # 对于无效时间，使用一个固定的特殊时间戳表示"未知时间"
+                if created_time is None:
+                    # 使用1900-01-01作为"未知时间"的标识
+                    created_time = datetime(1900, 1, 1)
+                    is_time_valid = False
                 
                 # 检查是否已存在
                 exists = await RedfishLogDao.check_log_exists(db, device.device_id, entry_id, created_time)
@@ -259,6 +338,12 @@ class RedfishLogService:
                     continue
                 
                 # 创建日志对象
+                # 将完整的原始Redfish响应保存到备注中
+                import json
+                
+                # 只保存完整的Redfish响应
+                original_log_info = log_entry.get('raw_data', {})
+                
                 log_model = AddRedfishLogModel(
                     device_id=device.device_id,
                     device_ip=device.oob_ip,
@@ -268,9 +353,7 @@ class RedfishLogService:
                     severity=log_entry.get('severity', ''),
                     created_time=created_time,
                     message=log_entry.get('message', ''),
-                    message_id=log_entry.get('message_id', ''),
-                    sensor_type=log_entry.get('sensor_type', ''),
-                    sensor_number=log_entry.get('sensor_number', 0),
+                    remark=json.dumps(original_log_info, ensure_ascii=False, indent=2),
                     create_by=operator,
                     create_time=datetime.now()
                 )
@@ -297,6 +380,101 @@ class RedfishLogService:
         except Exception as e:
             logger.error(f"收集设备 {device.oob_ip} 日志失败: {str(e)}")
             raise e
+    
+    @classmethod
+    async def _collect_single_device_logs_temp(cls, device, log_type: str, 
+                                             max_entries: int, force_refresh: bool) -> RedfishLogTempCollectResultModel:
+        """
+        临时收集单个设备的日志（不保存到数据库）
+        
+        Args:
+            device: 设备对象
+            log_type: 日志类型
+            max_entries: 最大条目数
+            force_refresh: 是否强制刷新
+            
+        Returns:
+            临时收集结果
+        """
+        try:
+            # 解密密码
+            decrypted_password = decrypt_password(device.redfish_password)
+            
+            # 创建Redfish客户端
+            client = RedfishClient(
+                host=device.oob_ip,
+                username=device.redfish_username,
+                password=decrypted_password,
+                port=device.oob_port or 443,
+                timeout=30
+            )
+            
+            # 获取日志（临时模式下不使用since_timestamp）
+            logs_data = await client.get_event_logs(
+                log_type=log_type,
+                max_entries=max_entries,
+                since_timestamp=None
+            )
+            
+            # 过滤和统计日志
+            critical_count = 0
+            warning_count = 0
+            filtered_logs = []
+            
+            for log_entry in logs_data:
+                severity = log_entry.get('severity', '').upper()
+                
+                # 只处理Critical和Warning级别的日志
+                if severity in ['CRITICAL', 'WARNING']:
+                    # 处理创建时间
+                    created_time_str = log_entry.get('created', '')
+                    is_time_valid = is_valid_timestamp(created_time_str) if created_time_str else False
+                    
+                    # 生成完整的原始日志信息JSON
+                    import json
+                    
+                    # 只保存完整的Redfish响应
+                    original_log_info = log_entry.get('raw_data', {})
+                    
+                    # 转换日志格式供前端显示
+                    log_display = {
+                        'entryId': log_entry.get('id', ''),
+                        'entryType': log_entry.get('entry_type', ''),
+                        'logSource': log_entry.get('log_source', ''),
+                        'severity': severity,
+                        'createdTime': log_entry.get('created', ''),
+                        'message': log_entry.get('message', ''),
+                        'originalData': json.dumps(original_log_info, ensure_ascii=False, indent=2)
+                    }
+                    
+                    filtered_logs.append(log_display)
+                    
+                    if severity == 'CRITICAL':
+                        critical_count += 1
+                    elif severity == 'WARNING':
+                        warning_count += 1
+            
+            return RedfishLogTempCollectResultModel(
+                success=True,
+                device_id=device.device_id,
+                device_ip=device.oob_ip,
+                device_name=device.hostname,
+                total_collected=len(filtered_logs),
+                critical_count=critical_count,
+                warning_count=warning_count,
+                logs_data=filtered_logs,
+                message=f"成功收集设备 {device.oob_ip} 的 {len(filtered_logs)} 条日志"
+            )
+            
+        except Exception as e:
+            logger.error(f"临时收集设备 {device.oob_ip} 日志失败: {str(e)}")
+            return RedfishLogTempCollectResultModel(
+                success=False,
+                device_id=device.device_id,
+                device_ip=device.oob_ip,
+                device_name=device.hostname,
+                message=f"收集失败: {str(e)}"
+            )
     
     @classmethod
     async def cleanup_old_logs_services(cls, db: AsyncSession, days: int = 30) -> RedfishLogCleanupResultModel:
@@ -381,12 +559,13 @@ class RedfishLogService:
             return ResponseUtil.failure(msg="删除设备日志失败")
     
     @classmethod
-    def _convert_do_to_vo(cls, log_do: RedfishLogDO) -> RedfishLogModel:
+    def _convert_do_to_vo(cls, log_do: RedfishLogDO, hostname: str = None) -> RedfishLogModel:
         """将数据对象转换为视图对象"""
         return RedfishLogModel(
             log_id=str(log_do.log_id),
             device_id=log_do.device_id,
             device_ip=log_do.device_ip,
+            hostname=hostname,
             entry_id=log_do.entry_id,
             entry_type=log_do.entry_type,
             log_source=log_do.log_source,
@@ -394,19 +573,17 @@ class RedfishLogService:
             created_time=log_do.created_time,
             collected_time=log_do.collected_time,
             message=log_do.message,
-            message_id=log_do.message_id,
-            sensor_type=log_do.sensor_type,
-            sensor_number=log_do.sensor_number,
             remark=log_do.remark
         )
     
     @classmethod
-    def _convert_do_to_detail_vo(cls, log_do: RedfishLogDO) -> RedfishLogDetailModel:
+    def _convert_do_to_detail_vo(cls, log_do: RedfishLogDO, hostname: str = None) -> RedfishLogDetailModel:
         """将数据对象转换为详细视图对象"""
         return RedfishLogDetailModel(
             log_id=str(log_do.log_id),
             device_id=log_do.device_id,
             device_ip=log_do.device_ip,
+            hostname=hostname,
             entry_id=log_do.entry_id,
             entry_type=log_do.entry_type,
             log_source=log_do.log_source,
@@ -414,9 +591,6 @@ class RedfishLogService:
             created_time=log_do.created_time,
             collected_time=log_do.collected_time,
             message=log_do.message,
-            message_id=log_do.message_id,
-            sensor_type=log_do.sensor_type,
-            sensor_number=log_do.sensor_number,
             remark=log_do.remark,
             create_by=log_do.create_by,
             create_time=log_do.create_time,

@@ -32,7 +32,7 @@ deviceController = APIRouter(prefix='/redfish/device', dependencies=[Depends(Log
 @deviceController.get(
     '/list', 
     response_model=DevicePageResponseModel, 
-    dependencies=[Depends(CheckUserInterfaceAuth('redfish:device:list'))]
+    dependencies=[Depends(CheckUserInterfaceAuth(['redfish:device:list', 'redfish:log:temp', 'redfish:log:history']))]
 )
 async def get_device_list(
     request: Request,

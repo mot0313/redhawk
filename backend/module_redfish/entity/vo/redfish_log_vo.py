@@ -92,6 +92,7 @@ class RedfishLogModel(BaseModel):
     log_id: str = Field(..., description="日志ID", alias="logId")
     device_id: int = Field(..., description="设备ID", alias="deviceId")
     device_ip: str = Field(..., description="设备IP地址", alias="deviceIp")
+    hostname: Optional[str] = Field(None, description="主机名")
     entry_id: Optional[str] = Field(None, description="原始条目ID", alias="entryId")
     entry_type: Optional[str] = Field(None, description="条目类型", alias="entryType")
     log_source: str = Field(..., description="日志来源", alias="logSource")
@@ -99,9 +100,6 @@ class RedfishLogModel(BaseModel):
     created_time: datetime = Field(..., description="日志创建时间", alias="createdTime")
     collected_time: datetime = Field(..., description="日志收集时间", alias="collectedTime")
     message: Optional[str] = Field(None, description="日志消息")
-    message_id: Optional[str] = Field(None, description="消息ID", alias="messageId")
-    sensor_type: Optional[str] = Field(None, description="传感器类型", alias="sensorType")
-    sensor_number: Optional[int] = Field(None, description="传感器编号", alias="sensorNumber")
     remark: Optional[str] = Field(None, description="备注")
 
 
@@ -125,9 +123,6 @@ class AddRedfishLogModel(BaseModel):
     severity: str = Field(..., description="严重程度")
     created_time: datetime = Field(..., description="日志创建时间")
     message: Optional[str] = Field(None, description="日志消息")
-    message_id: Optional[str] = Field(None, description="消息ID")
-    sensor_type: Optional[str] = Field(None, description="传感器类型")
-    sensor_number: Optional[int] = Field(None, description="传感器编号")
     remark: Optional[str] = Field(None, description="备注")
     
     # 系统字段
@@ -174,6 +169,7 @@ class DeviceLogCollectModel(BaseModel):
     log_type: str = Field("all", description="日志类型(sel/mel/all)", alias="logType")
     max_entries: int = Field(100, ge=1, le=1000, description="最大条目数", alias="maxEntries")
     force_refresh: bool = Field(False, description="是否强制刷新", alias="forceRefresh")
+    no_storage: bool = Field(False, description="仅收集不保存到数据库", alias="noStorage")
     
     @field_validator('log_type')
     @classmethod
@@ -213,4 +209,19 @@ class RedfishLogCleanupResultModel(BaseModel):
     success: bool = Field(..., description="是否成功")
     cleaned_count: int = Field(0, description="清理数量")
     before_date: datetime = Field(..., description="清理日期之前")
+    message: str = Field("", description="结果消息")
+
+
+class RedfishLogTempCollectResultModel(BaseModel):
+    """临时日志收集结果模型"""
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+    
+    success: bool = Field(..., description="是否成功")
+    device_id: Optional[int] = Field(None, description="设备ID", alias="deviceId")
+    device_ip: Optional[str] = Field(None, description="设备IP", alias="deviceIp")
+    device_name: Optional[str] = Field(None, description="设备名称", alias="deviceName")
+    total_collected: int = Field(0, description="总收集数量", alias="totalCollected")
+    critical_count: int = Field(0, description="严重错误数量", alias="criticalCount")
+    warning_count: int = Field(0, description="警告数量", alias="warningCount")
+    logs_data: List[dict] = Field([], description="日志数据列表", alias="logsData")
     message: str = Field("", description="结果消息")

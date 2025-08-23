@@ -36,18 +36,15 @@ class RedfishLogDO(Base):
     
     # 消息内容
     message = Column(Text, comment='日志消息')
-    message_id = Column(String(100), comment='消息ID')
     
-    # 传感器信息
-    sensor_type = Column(String(50), comment='传感器类型')
-    sensor_number = Column(Integer, comment='传感器编号')
+    # 传感器信息字段已删除（不再使用）
     
     # 系统字段
     create_by = Column(String(50), comment='创建者')
     create_time = Column(DateTime, default=datetime.now, comment='创建时间')
     update_by = Column(String(50), comment='更新者')
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
-    remark = Column(String(500), comment='备注')
+    remark = Column(Text, comment='备注')
     
     # 创建索引以提高查询性能
     __table_args__ = (

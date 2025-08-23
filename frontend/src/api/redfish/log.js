@@ -76,3 +76,11 @@ export function getDeviceSelectList() {
     params: { pageSize: 1000 }
   })
 }
+
+// 获取设备列表（用于日志收集）
+export function getDeviceListForLog() {
+  return request({
+    url: '/redfish/log/device/list',
+    method: 'get'
+  })
+}
