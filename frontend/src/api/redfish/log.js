@@ -73,6 +73,6 @@ export function getDeviceSelectList() {
   return request({
     url: '/redfish/device/list',
     method: 'get',
-    params: { page_size: 1000 }
+    params: { pageSize: 1000 }
   })
 }

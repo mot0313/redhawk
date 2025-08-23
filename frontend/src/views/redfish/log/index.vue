@@ -2,16 +2,16 @@
   <div class="app-container">
     <!-- 搜索条件 -->
     <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="68px">
-      <el-form-item label="设备IP" prop="device_ip">
+      <el-form-item label="设备IP" prop="deviceIp">
         <el-input
-          v-model="queryParams.device_ip"
+          v-model="queryParams.deviceIp"
           placeholder="请输入设备IP"
           clearable
           @keyup.enter="handleQuery"
         />
       </el-form-item>
-      <el-form-item label="日志来源" prop="log_source">
-        <el-select v-model="queryParams.log_source" placeholder="请选择日志来源" clearable>
+      <el-form-item label="日志来源" prop="logSource">
+        <el-select v-model="queryParams.logSource" placeholder="请选择日志来源" clearable>
           <el-option label="全部" value="all" />
           <el-option label="系统事件日志(SEL)" value="SEL" />
           <el-option label="管理事件日志(MEL)" value="MEL" />
@@ -24,9 +24,9 @@
           <el-option label="警告" value="WARNING" />
         </el-select>
       </el-form-item>
-      <el-form-item label="消息关键词" prop="message_keyword">
+      <el-form-item label="消息关键词" prop="messageKeyword">
         <el-input
-          v-model="queryParams.message_keyword"
+          v-model="queryParams.messageKeyword"
           placeholder="请输入消息关键词"
           clearable
           @keyup.enter="handleQuery"
@@ -97,7 +97,7 @@
             <span>总日志数</span>
           </div>
           <div class="card-body">
-            <span class="stat-number">{{ statistics.total_count }}</span>
+            <span class="stat-number">{{ statistics.totalCount }}</span>
           </div>
         </el-card>
       </el-col>
@@ -107,7 +107,7 @@
             <span>严重错误</span>
           </div>
           <div class="card-body">
-            <span class="stat-number critical">{{ statistics.critical_count }}</span>
+            <span class="stat-number critical">{{ statistics.criticalCount }}</span>
           </div>
         </el-card>
       </el-col>
@@ -117,7 +117,7 @@
             <span>警告</span>
           </div>
           <div class="card-body">
-            <span class="stat-number warning">{{ statistics.warning_count }}</span>
+            <span class="stat-number warning">{{ statistics.warningCount }}</span>
           </div>
         </el-card>
       </el-col>
@@ -127,7 +127,7 @@
             <span>今日日志</span>
           </div>
           <div class="card-body">
-            <span class="stat-number">{{ statistics.today_count }}</span>
+            <span class="stat-number">{{ statistics.todayCount }}</span>
           </div>
         </el-card>
       </el-col>
@@ -136,12 +136,12 @@
     <!-- 日志列表 -->
     <el-table v-loading="loading" :data="logList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="55" align="center" />
-      <el-table-column label="设备IP" align="center" prop="device_ip" width="150" />
-      <el-table-column label="日志来源" align="center" prop="log_source" width="100">
+      <el-table-column label="设备IP" align="center" prop="deviceIp" width="150" />
+      <el-table-column label="日志来源" align="center" prop="logSource" width="100">
         <template #default="scope">
-          <el-tag v-if="scope.row.log_source === 'SEL'" type="primary">SEL</el-tag>
-          <el-tag v-else-if="scope.row.log_source === 'MEL'" type="success">MEL</el-tag>
-          <el-tag v-else type="info">{{ scope.row.log_source }}</el-tag>
+          <el-tag v-if="scope.row.logSource === 'SEL'" type="primary">SEL</el-tag>
+          <el-tag v-else-if="scope.row.logSource === 'MEL'" type="success">MEL</el-tag>
+          <el-tag v-else type="info">{{ scope.row.logSource }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="严重程度" align="center" prop="severity" width="100">
@@ -156,19 +156,19 @@
           <span>{{ scope.row.message || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="传感器类型" align="center" prop="sensor_type" width="120">
+      <el-table-column label="传感器类型" align="center" prop="sensorType" width="120">
         <template #default="scope">
-          <span>{{ scope.row.sensor_type || '-' }}</span>
+          <span>{{ scope.row.sensorType || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="创建时间" align="center" prop="created_time" width="180">
+      <el-table-column label="创建时间" align="center" prop="createdTime" width="180">
         <template #default="scope">
-          <span>{{ parseTime(scope.row.created_time, '{y}-{m}-{d} {h}:{i}:{s}') }}</span>
+          <span>{{ parseTime(scope.row.createdTime, '{y}-{m}-{d} {h}:{i}:{s}') }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="收集时间" align="center" prop="collected_time" width="180">
+      <el-table-column label="收集时间" align="center" prop="collectedTime" width="180">
         <template #default="scope">
-          <span>{{ parseTime(scope.row.collected_time, '{y}-{m}-{d} {h}:{i}:{s}') }}</span>
+          <span>{{ parseTime(scope.row.collectedTime, '{y}-{m}-{d} {h}:{i}:{s}') }}</span>
         </template>
       </el-table-column>
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width" width="180">
@@ -183,36 +183,36 @@
     <pagination
       v-show="total>0"
       :total="total"
-      v-model:page="queryParams.page_num"
-      v-model:limit="queryParams.page_size"
+      v-model:page="queryParams.pageNum"
+      v-model:limit="queryParams.pageSize"
       @pagination="getList"
     />
 
     <!-- 收集日志对话框 -->
     <el-dialog :title="collectTitle" v-model="collectOpen" width="500px" append-to-body>
       <el-form :model="collectForm" :rules="collectRules" ref="collectRef" label-width="100px">
-        <el-form-item label="设备选择" prop="device_id">
-          <el-select v-model="collectForm.device_id" placeholder="请选择设备（留空表示所有设备）" clearable style="width: 100%">
+        <el-form-item label="设备选择" prop="deviceId">
+          <el-select v-model="collectForm.deviceId" placeholder="请选择设备（留空表示所有设备）" clearable style="width: 100%">
             <el-option
               v-for="device in deviceList"
-              :key="device.device_id"
-              :label="`${device.hostname} (${device.oob_ip})`"
-              :value="device.device_id"
+              :key="device.deviceId"
+              :label="`${device.hostname} (${device.oobIp})`"
+              :value="device.deviceId"
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="日志类型" prop="log_type">
-          <el-select v-model="collectForm.log_type" placeholder="请选择日志类型" style="width: 100%">
+        <el-form-item label="日志类型" prop="logType">
+          <el-select v-model="collectForm.logType" placeholder="请选择日志类型" style="width: 100%">
             <el-option label="全部日志" value="all" />
             <el-option label="系统事件日志(SEL)" value="sel" />
             <el-option label="管理事件日志(MEL)" value="mel" />
           </el-select>
         </el-form-item>
-        <el-form-item label="最大条目数" prop="max_entries">
-          <el-input-number v-model="collectForm.max_entries" :min="1" :max="1000" style="width: 100%" />
+        <el-form-item label="最大条目数" prop="maxEntries">
+          <el-input-number v-model="collectForm.maxEntries" :min="1" :max="1000" style="width: 100%" />
         </el-form-item>
-        <el-form-item label="强制刷新" prop="force_refresh">
-          <el-switch v-model="collectForm.force_refresh" />
+        <el-form-item label="强制刷新" prop="forceRefresh">
+          <el-switch v-model="collectForm.forceRefresh" />
           <span class="ml-2 text-sm text-gray-500">开启后将收集所有日志，否则只收集新增日志</span>
         </el-form-item>
       </el-form>
@@ -245,22 +245,22 @@
     <!-- 日志详情对话框 -->
     <el-dialog title="日志详情" v-model="detailOpen" width="800px" append-to-body>
       <el-descriptions :column="2" border>
-        <el-descriptions-item label="日志ID">{{ logDetail.log_id }}</el-descriptions-item>
-        <el-descriptions-item label="设备ID">{{ logDetail.device_id }}</el-descriptions-item>
-        <el-descriptions-item label="设备IP">{{ logDetail.device_ip }}</el-descriptions-item>
-        <el-descriptions-item label="日志来源">{{ logDetail.log_source }}</el-descriptions-item>
+        <el-descriptions-item label="日志ID">{{ logDetail.logId }}</el-descriptions-item>
+        <el-descriptions-item label="设备ID">{{ logDetail.deviceId }}</el-descriptions-item>
+        <el-descriptions-item label="设备IP">{{ logDetail.deviceIp }}</el-descriptions-item>
+        <el-descriptions-item label="日志来源">{{ logDetail.logSource }}</el-descriptions-item>
         <el-descriptions-item label="严重程度">
           <el-tag v-if="logDetail.severity === 'CRITICAL'" type="danger">严重</el-tag>
           <el-tag v-else-if="logDetail.severity === 'WARNING'" type="warning">警告</el-tag>
           <el-tag v-else type="info">{{ logDetail.severity }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="条目类型">{{ logDetail.entry_type || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="消息ID">{{ logDetail.message_id || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="传感器类型">{{ logDetail.sensor_type || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="传感器编号">{{ logDetail.sensor_number || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{ parseTime(logDetail.created_time) }}</el-descriptions-item>
-        <el-descriptions-item label="收集时间">{{ parseTime(logDetail.collected_time) }}</el-descriptions-item>
-        <el-descriptions-item label="创建者">{{ logDetail.create_by || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="条目类型">{{ logDetail.entryType || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="消息ID">{{ logDetail.messageId || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="传感器类型">{{ logDetail.sensorType || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="传感器编号">{{ logDetail.sensorNumber || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ parseTime(logDetail.createdTime) }}</el-descriptions-item>
+        <el-descriptions-item label="收集时间">{{ parseTime(logDetail.collectedTime) }}</el-descriptions-item>
+        <el-descriptions-item label="创建者">{{ logDetail.createBy || '-' }}</el-descriptions-item>
         <el-descriptions-item label="消息内容" span="2">
           <div style="max-height: 200px; overflow-y: auto;">
             {{ logDetail.message || '-' }}
@@ -306,33 +306,33 @@ const deviceList = ref([]);
 
 // 统计信息
 const statistics = ref({
-  total_count: 0,
-  critical_count: 0,
-  warning_count: 0,
-  sel_count: 0,
-  mel_count: 0,
-  today_count: 0,
-  recent_7days_count: 0
+  totalCount: 0,
+  criticalCount: 0,
+  warningCount: 0,
+  selCount: 0,
+  melCount: 0,
+  todayCount: 0,
+  recent7daysCount: 0
 });
 
 // 查询参数
 const queryParams = ref({
-  page_num: 1,
-  page_size: 10,
-  device_ip: null,
-  log_source: null,
+  pageNum: 1,
+  pageSize: 10,
+  deviceIp: null,
+  logSource: null,
   severity: null,
-  message_keyword: null,
-  start_time: null,
-  end_time: null
+  messageKeyword: null,
+  startTime: null,
+  endTime: null
 });
 
 // 收集表单
 const collectForm = ref({
-  device_id: null,
-  log_type: "all",
-  max_entries: 100,
-  force_refresh: false
+  deviceId: null,
+  logType: "all",
+  maxEntries: 100,
+  forceRefresh: false
 });
 
 // 清理表单
@@ -345,10 +345,10 @@ const logDetail = ref({});
 
 // 表单校验
 const collectRules = {
-  log_type: [
+  logType: [
     { required: true, message: "日志类型不能为空", trigger: "change" }
   ],
-  max_entries: [
+  maxEntries: [
     { required: true, message: "最大条目数不能为空", trigger: "blur" }
   ]
 };
@@ -362,8 +362,8 @@ const cleanupRules = {
 /** 查询日志列表 */
 function getList() {
   loading.value = true;
-  queryParams.value.start_time = dateRange.value ? dateRange.value[0] : null;
-  queryParams.value.end_time = dateRange.value ? dateRange.value[1] : null;
+  queryParams.value.startTime = dateRange.value ? dateRange.value[0] : null;
+  queryParams.value.endTime = dateRange.value ? dateRange.value[1] : null;
   
   listRedfishLog(queryParams.value).then(response => {
     logList.value = response.rows;
@@ -388,7 +388,7 @@ function getDeviceList() {
 
 /** 搜索按钮操作 */
 function handleQuery() {
-  queryParams.value.page_num = 1;
+  queryParams.value.pageNum = 1;
   getList();
 }
 
@@ -401,14 +401,14 @@ function resetQuery() {
 
 /** 多选框选中数据 */
 function handleSelectionChange(selection) {
-  ids.value = selection.map(item => item.log_id);
+  ids.value = selection.map(item => item.logId);
   single.value = selection.length != 1;
   multiple.value = !selection.length;
 }
 
 /** 详情按钮操作 */
 function handleDetail(row) {
-  const logId = row.log_id;
+  const logId = row.logId;
   getRedfishLog(logId).then(response => {
     logDetail.value = response.data;
     detailOpen.value = true;
@@ -433,7 +433,7 @@ function handleCleanup() {
 
 /** 删除按钮操作 */
 function handleDelete(row) {
-  const logIds = row.log_id || ids.value;
+  const logIds = row.logId || ids.value;
   proxy.$modal.confirm('是否确认删除选中的日志记录？').then(function() {
     return delRedfishLog(logIds);
   }).then(() => {
@@ -452,10 +452,10 @@ function handleExport() {
 /** 表单重置 */
 function reset() {
   collectForm.value = {
-    device_id: null,
-    log_type: "all",
-    max_entries: 100,
-    force_refresh: false
+    deviceId: null,
+    logType: "all",
+    maxEntries: 100,
+    forceRefresh: false
   };
   proxy.resetForm("collectRef");
 }
