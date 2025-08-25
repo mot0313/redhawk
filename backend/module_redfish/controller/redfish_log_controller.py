@@ -240,6 +240,7 @@ async def export_logs_data(
     device_id: Optional[int] = Query(None, description="设备ID"),
     log_source: Optional[str] = Query(None, description="日志来源"),
     severity: Optional[str] = Query(None, description="严重程度"),
+    message_keyword: Optional[str] = Query(None, description="消息关键词"),
     start_time: Optional[str] = Query(None, description="开始时间"),
     end_time: Optional[str] = Query(None, description="结束时间"),
     query_db: AsyncSession = Depends(get_db)
@@ -251,6 +252,7 @@ async def export_logs_data(
             device_id=device_id,
             log_source=log_source,
             severity=severity,
+            message_keyword=message_keyword,
             start_time=start_time,
             end_time=end_time,
             page_size=10000  # 导出时设置较大的页面大小
@@ -273,8 +275,6 @@ async def export_logs_data(
                 "创建时间": log.created_time.strftime("%Y-%m-%d %H:%M:%S") if log.created_time else "",
                 "收集时间": log.collected_time.strftime("%Y-%m-%d %H:%M:%S") if log.collected_time else "",
                 "消息内容": log.message or "",
-                "传感器类型": log.sensor_type or "",
-                "传感器编号": log.sensor_number or "",
                 "备注": log.remark or ""
             })
         

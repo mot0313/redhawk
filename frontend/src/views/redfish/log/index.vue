@@ -1,30 +1,42 @@
 <template>
   <div class="app-container">
     <!-- 页面标题 -->
-    <div class="page-header mb-4">
-      <h2 class="page-title">📚 历史日志管理</h2>
+    <div class="page-header">
+      <h2>📚 历史日志管理</h2>
       <p class="page-desc">管理和查询已保存的设备日志记录，支持批量操作和定时收集任务。日志自动保留30天，过期自动清理。</p>
     </div>
 
     <!-- 搜索条件 -->
-    <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="68px">
-      <el-form-item label="设备IP" prop="deviceIp">
-        <el-input
-          v-model="queryParams.deviceIp"
-          placeholder="请输入设备IP"
-          clearable
-          @keyup.enter="handleQuery"
-        />
+    <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="85px">
+      <el-form-item label="选择设备" prop="deviceId">
+        <el-select 
+          v-model="queryParams.deviceId" 
+          placeholder="请选择设备" 
+          clearable 
+          filterable
+          style="width: 200px"
+          @change="handleQuery"
+        >
+          <el-option
+            v-for="device in deviceList"
+            :key="device.deviceId"
+            :label="`${device.hostname} (${device.oobIp})`"
+            :value="device.deviceId"
+          >
+            <span style="float: left">{{ device.hostname }}</span>
+            <span style="float: right; color: #8492a6; font-size: 13px">{{ device.oobIp }}</span>
+          </el-option>
+        </el-select>
       </el-form-item>
       <el-form-item label="日志来源" prop="logSource">
-        <el-select v-model="queryParams.logSource" placeholder="请选择日志来源" clearable>
+        <el-select v-model="queryParams.logSource" placeholder="请选择日志来源" style="width: 150px" clearable>
           <el-option label="全部" value="all" />
           <el-option label="系统事件日志(SEL)" value="SEL" />
           <el-option label="管理事件日志(MEL)" value="MEL" />
         </el-select>
       </el-form-item>
       <el-form-item label="严重程度" prop="severity">
-        <el-select v-model="queryParams.severity" placeholder="请选择严重程度" clearable>
+        <el-select v-model="queryParams.severity" placeholder="请选择严重程度" style="width: 150px" clearable>
           <el-option label="全部" value="all" />
           <el-option label="严重" value="CRITICAL" />
           <el-option label="警告" value="WARNING" />
@@ -86,11 +98,11 @@
       </el-col>
       <el-col :span="1.5">
         <el-button
-          type="info"
+          :type="showStatistics ? 'success' : 'info'"
           plain
           icon="PieChart"
-          @click="showStatistics = true"
-        >统计信息</el-button>
+          @click="toggleStatistics"
+        >{{ showStatistics ? '隐藏统计' : '统计信息' }}</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
@@ -291,7 +303,7 @@ import {
   cleanupOldLogs,
   delRedfishLog,
   exportLogsData,
-  getDeviceSelectList
+  getDeviceListForLog
 } from "@/api/redfish/log";
 import { parseTime } from "@/utils/ruoyi";
 
@@ -329,7 +341,7 @@ const statistics = ref({
 const queryParams = ref({
   pageNum: 1,
   pageSize: 10,
-  deviceIp: null,
+  deviceId: null,
   logSource: null,
   severity: null,
   messageKeyword: null,
@@ -375,6 +387,11 @@ function getList() {
   queryParams.value.startTime = dateRange.value ? dateRange.value[0] : null;
   queryParams.value.endTime = dateRange.value ? dateRange.value[1] : null;
   
+  // 处理消息关键词，确保不区分大小写
+  if (queryParams.value.messageKeyword) {
+    queryParams.value.messageKeyword = queryParams.value.messageKeyword.toLowerCase();
+  }
+  
   listRedfishLog(queryParams.value).then(response => {
     logList.value = response.rows;
     total.value = response.total;
@@ -390,10 +407,15 @@ function getStatistics() {
 }
 
 /** 获取设备列表 */
-function getDeviceList() {
-  getDeviceSelectList().then(response => {
-    deviceList.value = response.rows || [];
-  });
+async function getDeviceList() {
+  try {
+    const response = await getDeviceListForLog();
+    deviceList.value = response.data.rows || [];
+  } catch (error) {
+    console.error('获取设备列表失败:', error);
+    proxy.$modal.msgError('获取设备列表失败，请确保拥有日志查看权限');
+    deviceList.value = [];
+  }
 }
 
 /** 搜索按钮操作 */
@@ -405,6 +427,7 @@ function handleQuery() {
 /** 重置按钮操作 */
 function resetQuery() {
   dateRange.value = [];
+  queryParams.value.deviceId = null;
   proxy.resetForm("queryRef");
   handleQuery();
 }
@@ -457,6 +480,11 @@ function handleExport() {
   proxy.download('redfish/log/export/data', {
     ...queryParams.value
   }, `redfish_logs_${new Date().getTime()}.xlsx`);
+}
+
+/** 切换统计信息显示 */
+function toggleStatistics() {
+  showStatistics.value = !showStatistics.value;
 }
 
 /** 表单重置 */
@@ -566,6 +594,7 @@ function formatCreatedTime(timeStr) {
 }
 
 onMounted(() => {
+  getDeviceList();
   getList();
   getStatistics();
 });
@@ -573,23 +602,24 @@ onMounted(() => {
 
 <style scoped>
 .page-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(135deg, #1F9E91 0%, #38f9d7 100%);
   padding: 20px;
   border-radius: 8px;
   margin-bottom: 20px;
+  border: 1px solid #ebeef5;
 }
 
-.page-title {
-  font-size: 24px;
-  font-weight: bold;
-  margin: 0 0 8px 0;
+.page-header h2 {
+  color: white;
+  margin-bottom: 10px;
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .page-desc {
   font-size: 14px;
   margin: 0;
-  opacity: 0.9;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .mb-4 {

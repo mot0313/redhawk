@@ -457,7 +457,7 @@ async function collectLogs() {
 function filterLogs() {
   let filtered = [...logsList.value];
   
-  // 关键词筛选
+  // 关键词筛选（不区分大小写）
   if (filterKeyword.value) {
     const keyword = filterKeyword.value.toLowerCase();
     filtered = filtered.filter(log => 

@@ -52,10 +52,7 @@ class RedfishLogDao:
                 conditions.append(RedfishLogDO.severity == query_object.severity)
             if query_object.message_keyword:
                 conditions.append(
-                    or_(
-                        RedfishLogDO.message.like(f'%{query_object.message_keyword}%'),
-                        RedfishLogDO.message_id.like(f'%{query_object.message_keyword}%')
-                    )
+                    func.lower(RedfishLogDO.message).like(f'%{query_object.message_keyword.lower()}%')
                 )
             if query_object.start_time:
                 conditions.append(RedfishLogDO.created_time >= query_object.start_time)
@@ -99,13 +96,10 @@ class RedfishLogDao:
         if query_object.severity and query_object.severity != 'all':
             conditions.append(RedfishLogDO.severity == query_object.severity)
         
-        # 消息关键词搜索
+        # 消息关键词搜索（不区分大小写）
         if query_object.message_keyword:
             conditions.append(
-                or_(
-                    RedfishLogDO.message.like(f'%{query_object.message_keyword}%'),
-                    RedfishLogDO.message_id.like(f'%{query_object.message_keyword}%')
-                )
+                func.lower(RedfishLogDO.message).like(f'%{query_object.message_keyword.lower()}%')
             )
         
         # 时间范围筛选
