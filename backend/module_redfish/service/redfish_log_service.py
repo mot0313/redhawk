@@ -276,7 +276,11 @@ class RedfishLogService:
         """
         try:
             # 解密密码
-            decrypted_password = decrypt_password(device.redfish_password)
+            try:
+                decrypted_password = decrypt_password(device.redfish_password)
+            except ValueError as e:
+                # 密码解密失败，抛出友好的错误信息
+                raise Exception(f"设备 {device.oob_ip} 密码解密失败: {str(e)}")
             
             # 创建Redfish客户端
             client = RedfishClient(
@@ -378,8 +382,12 @@ class RedfishLogService:
             }
             
         except Exception as e:
-            logger.error(f"收集设备 {device.oob_ip} 日志失败: {str(e)}")
-            raise e
+            import traceback
+            error_msg = str(e) if str(e) else f"未知错误: {type(e).__name__}"
+            error_traceback = traceback.format_exc()
+            logger.error(f"收集设备 {device.oob_ip} 日志失败: {error_msg}")
+            logger.error(f"错误详情: {error_traceback}")
+            raise Exception(f"收集设备 {device.oob_ip} 日志失败: {error_msg}")
     
     @classmethod
     async def _collect_single_device_logs_temp(cls, device, log_type: str, 
@@ -398,7 +406,17 @@ class RedfishLogService:
         """
         try:
             # 解密密码
-            decrypted_password = decrypt_password(device.redfish_password)
+            try:
+                decrypted_password = decrypt_password(device.redfish_password)
+            except ValueError as e:
+                # 密码解密失败，返回友好的错误信息
+                return RedfishLogTempCollectResultModel(
+                    success=False,
+                    device_id=device.device_id,
+                    device_ip=device.oob_ip,
+                    device_name=device.hostname,
+                    message=f"密码解密失败: {str(e)}"
+                )
             
             # 创建Redfish客户端
             client = RedfishClient(
@@ -467,13 +485,17 @@ class RedfishLogService:
             )
             
         except Exception as e:
-            logger.error(f"临时收集设备 {device.oob_ip} 日志失败: {str(e)}")
+            import traceback
+            error_msg = str(e) if str(e) else f"未知错误: {type(e).__name__}"
+            error_traceback = traceback.format_exc()
+            logger.error(f"临时收集设备 {device.oob_ip} 日志失败: {error_msg}")
+            logger.error(f"错误详情: {error_traceback}")
             return RedfishLogTempCollectResultModel(
                 success=False,
                 device_id=device.device_id,
                 device_ip=device.oob_ip,
                 device_name=device.hostname,
-                message=f"收集失败: {str(e)}"
+                message=f"收集失败: {error_msg}"
             )
     
     @classmethod
@@ -597,3 +619,117 @@ class RedfishLogService:
             update_by=log_do.update_by,
             update_time=log_do.update_time
         )
+    
+    @staticmethod
+    async def export_logs_data_services(logs_list: List):
+        """
+        导出日志数据service
+        
+        Args:
+            logs_list: 日志列表
+            
+        Returns:
+            日志数据对应excel的二进制数据
+        """
+        import io
+        from openpyxl import Workbook
+        from openpyxl.styles import PatternFill, Font, Alignment
+        from openpyxl.utils import get_column_letter
+        
+        # 创建映射字典，将英文键映射到中文键
+        mapping_dict = {
+            'serialNo': '序号',
+            'deviceIp': '设备IP',
+            'entryId': '条目ID',
+            'entryType': '条目类型',
+            'logSource': '日志来源',
+            'severity': '严重程度',
+            'createdTime': '创建时间',
+            'collectedTime': '收集时间',
+            'message': '消息内容',
+            'remark': '备注'
+        }
+        
+        # 处理数据格式化
+        processed_data = []
+        for index, log in enumerate(logs_list, 1):
+            # 确保log是字典类型
+            if not isinstance(log, dict):
+                if hasattr(log, 'model_dump'):
+                    log_dict = log.model_dump(by_alias=True)
+                elif hasattr(log, '__dict__'):
+                    log_dict = {}
+                    for key, value in log.__dict__.items():
+                        if not key.startswith('_'):
+                            from utils.common_util import CamelCaseUtil
+                            camel_key = CamelCaseUtil.snake_to_camel(key)
+                            log_dict[camel_key] = value
+                    log_dict = log_dict
+                else:
+                    continue
+            else:
+                log_dict = log
+            
+            # 格式化严重程度
+            severity_map = {
+                'CRITICAL': '严重',
+                'WARNING': '警告',
+                'OK': '正常',
+                'INFO': '信息'
+            }
+            severity = log_dict.get('severity')
+            if severity:
+                log_dict['severity'] = severity_map.get(severity, severity)
+            
+            # 格式化时间
+            time_fields = ['createdTime', 'collectedTime']
+            for time_field in time_fields:
+                time_value = log_dict.get(time_field)
+                if time_value:
+                    try:
+                        if isinstance(time_value, str):
+                            log_dict[time_field] = time_value
+                        else:
+                            log_dict[time_field] = time_value.strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        log_dict[time_field] = ''
+            
+            # 添加序号
+            log_dict['serialNo'] = index
+            processed_data.append(log_dict)
+        
+        # 创建Excel文件
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "日志列表"
+        
+        # 表头样式设置
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(color='FFFFFF', bold=True)
+        
+        # 获取表头列表
+        headers = list(mapping_dict.values())
+        keys = list(mapping_dict.keys())
+        
+        # 写入表头
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            ws.column_dimensions[get_column_letter(col_num)].width = 15
+        
+        # 写入数据
+        for row_num, item in enumerate(processed_data, 2):
+            for col_num, key in enumerate(keys, 1):
+                cell = ws.cell(row=row_num, column=col_num)
+                cell.value = item.get(key, '')
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # 保存为字节数据
+        file_stream = io.BytesIO()
+        wb.save(file_stream)
+        file_stream.seek(0)
+        
+        return file_stream.getvalue()

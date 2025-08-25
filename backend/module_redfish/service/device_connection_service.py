@@ -46,7 +46,15 @@ class DeviceConnectionService:
                 )
             
             # 解密密码
-            decrypted_password = decrypt_password(device.redfish_password)
+            try:
+                decrypted_password = decrypt_password(device.redfish_password)
+            except ValueError as e:
+                logger.error(f"设备 {device.hostname} 密码解密失败: {str(e)}")
+                return DeviceConnectionResult(
+                    success=False,
+                    message="设备密码解密失败，请重新设置密码",
+                    system_info=None
+                )
             
             # 创建Redfish客户端
             client = RedfishClient(

@@ -64,7 +64,16 @@ class DeviceMonitor:
         """
         try:
             # 解密密码
-            password = decrypt_password(device_info.get('redfish_password', ''))
+            try:
+                password = decrypt_password(device_info.get('redfish_password', ''))
+            except ValueError as e:
+                logger.error(f"设备 {device_info.get('hostname', 'Unknown')} 密码解密失败: {str(e)}")
+                return {
+                    "device_id": device_info['device_id'],
+                    "success": False,
+                    "error": "设备密码解密失败，请重新设置密码",
+                    "alerts": []
+                }
             
             # 创建redfish客户端
             client = RedfishClient(

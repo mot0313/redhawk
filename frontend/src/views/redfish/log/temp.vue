@@ -136,17 +136,17 @@
       <div class="quick-filters mb-3">
         <span class="filter-label">快速筛选：</span>
         <el-tag 
-          :type="filterSeverity === '' ? 'primary' : ''"
+          :type="filterSeverity === '' ? 'primary' : 'info'"
           @click="quickFilterSeverity('')"
           class="filter-tag"
         >全部 ({{ logsList.length }})</el-tag>
         <el-tag 
-          :type="filterSeverity === 'CRITICAL' ? 'danger' : ''"
+          :type="filterSeverity === 'CRITICAL' ? 'danger' : 'info'"
           @click="quickFilterSeverity('CRITICAL')"
           class="filter-tag"
         >严重 ({{ statistics.criticalCount }})</el-tag>
         <el-tag 
-          :type="filterSeverity === 'WARNING' ? 'warning' : ''"
+          :type="filterSeverity === 'WARNING' ? 'warning' : 'info'"
           @click="quickFilterSeverity('WARNING')"
           class="filter-tag"
         >警告 ({{ statistics.warningCount }})</el-tag>
@@ -312,6 +312,7 @@
 import { ref, reactive, onMounted, computed, getCurrentInstance } from 'vue';
 import { collectDeviceLogs, getDeviceListForLog } from "@/api/redfish/log";
 import { parseTime } from "@/utils/ruoyi";
+import * as XLSX from 'xlsx';
 
 const { proxy } = getCurrentInstance();
 
@@ -529,8 +530,55 @@ function exportLogs() {
     return;
   }
   
-  // 这里可以实现导出功能
-  proxy.$modal.msgInfo('导出功能开发中...');
+  try {
+    // 准备导出数据
+    const exportData = filteredLogs.value.map((log, index) => ({
+      '序号': index + 1,
+      '设备IP': deviceInfo.deviceIp || '',
+      '条目ID': log.entryId || '',
+      '条目类型': log.entryType || '',
+      '日志来源': log.logSource || '',
+      '严重程度': log.severity || '',
+      '创建时间': log.createdTime || '',
+      '消息内容': log.message || '',
+      '原始日志数据': log.originalData || ''
+    }));
+    
+    // 创建工作簿
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    
+    // 设置列宽
+    const colWidths = [
+      { wch: 8 },   // 序号
+      { wch: 15 },  // 设备IP
+      { wch: 12 },  // 条目ID
+      { wch: 12 },  // 条目类型
+      { wch: 12 },  // 日志来源
+      { wch: 12 },  // 严重程度
+      { wch: 20 },  // 创建时间
+      { wch: 50 },  // 消息内容
+      { wch: 100 }  // 原始日志数据
+    ];
+    ws['!cols'] = colWidths;
+    
+    // 添加工作表
+    XLSX.utils.book_append_sheet(wb, ws, '临时日志');
+    
+    // 生成文件名
+    const timestamp = new Date().getTime();
+    const deviceName = deviceInfo.deviceName || deviceInfo.deviceIp || 'unknown';
+    const fileName = `temp_logs_${deviceName}_${timestamp}.xlsx`;
+    
+    // 下载文件
+    XLSX.writeFile(wb, fileName);
+    
+    proxy.$modal.msgSuccess(`成功导出 ${exportData.length} 条日志数据`);
+    
+  } catch (error) {
+    console.error('导出失败:', error);
+    proxy.$modal.msgError('导出失败，请重试');
+  }
 }
 
 /** 查看日志详情 */

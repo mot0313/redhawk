@@ -2,7 +2,7 @@
 Redfish日志管理Controller层
 """
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request, Query
+from fastapi import APIRouter, Depends, Request, Query, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Union, Optional, Literal
 from pydantic_validation_decorator import ValidateFields
@@ -20,6 +20,8 @@ from module_redfish.entity.vo.redfish_log_vo import (
 from module_redfish.service.redfish_log_service import RedfishLogService
 from utils.response_util import ResponseUtil
 from utils.log_util import logger
+from utils.excel_util import ExcelUtil
+from utils.common_util import bytes2file_response
 
 
 redfishLogController = APIRouter(prefix='/redfish/log', dependencies=[Depends(LoginService.get_current_user)])
@@ -231,55 +233,28 @@ async def delete_device_logs(
         return ResponseUtil.failure(msg='删除设备日志失败')
 
 
-@redfishLogController.get(
+@redfishLogController.post(
     '/export/data',
     dependencies=[Depends(CheckUserInterfaceAuth('redfish:log:export'))]
 )
+@Log(title='日志管理', business_type=BusinessType.EXPORT)
 async def export_logs_data(
     request: Request,
-    device_id: Optional[int] = Query(None, description="设备ID"),
-    log_source: Optional[str] = Query(None, description="日志来源"),
-    severity: Optional[str] = Query(None, description="严重程度"),
-    message_keyword: Optional[str] = Query(None, description="消息关键词"),
-    start_time: Optional[str] = Query(None, description="开始时间"),
-    end_time: Optional[str] = Query(None, description="结束时间"),
+    log_page_query: RedfishLogPageQueryModel = Form(),
     query_db: AsyncSession = Depends(get_db)
 ):
     """导出日志数据"""
     try:
-        # 构建查询条件
-        query_model = RedfishLogPageQueryModel.as_query(
-            device_id=device_id,
-            log_source=log_source,
-            severity=severity,
-            message_keyword=message_keyword,
-            start_time=start_time,
-            end_time=end_time,
-            page_size=10000  # 导出时设置较大的页面大小
-        )
-        
-        # 获取日志列表
+        # 获取全量数据
         logs_list = await RedfishLogService.get_redfish_log_list_services(
-            query_db, query_model, is_page=False
+            query_db, log_page_query, is_page=False
         )
         
-        # 转换为导出格式
-        export_data = []
-        for log in logs_list:
-            export_data.append({
-                "日志ID": log.log_id,
-                "设备ID": log.device_id,
-                "设备IP": log.device_ip,
-                "日志来源": log.log_source,
-                "严重程度": log.severity,
-                "创建时间": log.created_time.strftime("%Y-%m-%d %H:%M:%S") if log.created_time else "",
-                "收集时间": log.collected_time.strftime("%Y-%m-%d %H:%M:%S") if log.collected_time else "",
-                "消息内容": log.message or "",
-                "备注": log.remark or ""
-            })
+        # 调用导出服务
+        export_result = await RedfishLogService.export_logs_data_services(logs_list)
+        logger.info('导出成功')
         
-        logger.info(f'导出日志数据成功，共 {len(export_data)} 条记录')
-        return ResponseUtil.success(data=export_data, msg=f'导出成功，共 {len(export_data)} 条记录')
+        return ResponseUtil.streaming(data=bytes2file_response(export_result))
         
     except Exception as e:
         logger.error(f'导出日志数据失败: {str(e)}')

@@ -693,9 +693,15 @@ def encrypt_password(password: str) -> str:
 
 def decrypt_password(encrypted_password: str) -> str:
     """解密密码"""
-    if not RedfishConfig.redfish_encrypt_key:
-        raise ValueError("redfish_encrypt_key is not set in the environment variables.")
-    key = RedfishConfig.redfish_encrypt_key.encode()
-    f = Fernet(key)
-    decrypted_password = f.decrypt(encrypted_password.encode())
-    return decrypted_password.decode()
+    try:
+        if not RedfishConfig.redfish_encrypt_key:
+            raise ValueError("redfish_encrypt_key is not set in the environment variables.")
+        key = RedfishConfig.redfish_encrypt_key.encode()
+        f = Fernet(key)
+        decrypted_password = f.decrypt(encrypted_password.encode())
+        return decrypted_password.decode()
+    except Exception as e:
+        if "InvalidToken" in str(e) or "InvalidToken" in str(type(e).__name__):
+            raise ValueError("设备密码解密失败，可能是密码加密密钥发生变化或密码数据损坏。请重新设置设备密码。")
+        else:
+            raise ValueError(f"密码解密失败: {str(e)}")

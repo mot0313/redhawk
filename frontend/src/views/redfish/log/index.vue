@@ -479,7 +479,7 @@ function handleDelete(row) {
 function handleExport() {
   proxy.download('redfish/log/export/data', {
     ...queryParams.value
-  }, `redfish_logs_${new Date().getTime()}.xlsx`);
+  }, `redfish_logs_${new Date().getTime()}.xlsx`, 'post');
 }
 
 /** 切换统计信息显示 */

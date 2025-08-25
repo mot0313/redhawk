@@ -124,7 +124,12 @@ class DeviceService:
         # 处理密码字段
         if for_edit:
             # 编辑模式下解密密码
-            device_dict['redfish_password'] = decrypt_password(device.redfish_password)
+            try:
+                device_dict['redfish_password'] = decrypt_password(device.redfish_password)
+            except ValueError as e:
+                # 密码解密失败，返回空字符串，让用户重新输入
+                logger.warning(f"设备 {device.hostname} 密码解密失败，编辑时需要重新输入密码: {str(e)}")
+                device_dict['redfish_password'] = ""
         else:
             # 查看模式下隐藏密码
             device_dict['redfish_password'] = "******"
