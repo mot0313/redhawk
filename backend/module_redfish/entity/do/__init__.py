@@ -17,8 +17,7 @@ __all__ = [
     'AlertInfoDO', 
     # 附属表
     'BusinessHardwareUrgencyRulesDO',
-    'DutyPersonDO',
-    'DutyScheduleDO',
+
     'MaintenanceScheduleDO',
     'BusinessTypeDictDO',
     'HardwareTypeDictDO',

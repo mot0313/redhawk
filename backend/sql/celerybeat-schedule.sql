@@ -76,17 +76,7 @@ START 1
 CACHE 1;
 ALTER SEQUENCE "public"."device_log_check_tracking_id_seq" OWNER TO "postgres";
 
--- ----------------------------
--- Sequence structure for duty_schedule_duty_id_seq
--- ----------------------------
-DROP SEQUENCE IF EXISTS "public"."duty_schedule_duty_id_seq";
-CREATE SEQUENCE "public"."duty_schedule_duty_id_seq" 
-INCREMENT 1
-MINVALUE  1
-MAXVALUE 9223372036854775807
-START 1
-CACHE 1;
-ALTER SEQUENCE "public"."duty_schedule_duty_id_seq" OWNER TO "postgres";
+
 
 -- ----------------------------
 -- Sequence structure for gen_table_column_column_id_seq
@@ -517,51 +507,7 @@ COMMENT ON TABLE "public"."device_log_check_tracking" IS '设备日志检查时�
 BEGIN;
 COMMIT;
 
--- ----------------------------
--- Table structure for duty_schedule
--- ----------------------------
-DROP TABLE IF EXISTS "public"."duty_schedule";
-CREATE TABLE "public"."duty_schedule" (
-  "duty_id" int8 NOT NULL DEFAULT nextval('duty_schedule_duty_id_seq'::regclass),
-  "user_id" int8 NOT NULL,
-  "duty_date" date NOT NULL,
-  "duty_type" varchar(20) COLLATE "pg_catalog"."default" DEFAULT 'normal'::character varying,
-  "shift_type" varchar(20) COLLATE "pg_catalog"."default" DEFAULT 'all_day'::character varying,
-  "start_time" time(6),
-  "end_time" time(6),
-  "contact_phone" varchar(20) COLLATE "pg_catalog"."default",
-  "contact_email" varchar(100) COLLATE "pg_catalog"."default",
-  "backup_user_id" int8,
-  "backup_phone" varchar(20) COLLATE "pg_catalog"."default",
-  "duty_status" varchar(20) COLLATE "pg_catalog"."default" DEFAULT 'scheduled'::character varying,
-  "location" varchar(100) COLLATE "pg_catalog"."default",
-  "responsibilities" text COLLATE "pg_catalog"."default",
-  "handover_notes" text COLLATE "pg_catalog"."default",
-  "actual_start_time" timestamp(0),
-  "actual_end_time" timestamp(0),
-  "create_by" varchar(64) COLLATE "pg_catalog"."default" DEFAULT ''::character varying,
-  "create_time" timestamp(0) DEFAULT CURRENT_TIMESTAMP,
-  "update_by" varchar(64) COLLATE "pg_catalog"."default" DEFAULT ''::character varying,
-  "update_time" timestamp(0) DEFAULT CURRENT_TIMESTAMP,
-  "remark" varchar(500) COLLATE "pg_catalog"."default"
-)
-;
-ALTER TABLE "public"."duty_schedule" OWNER TO "postgres";
-COMMENT ON COLUMN "public"."duty_schedule"."duty_id" IS '值班ID';
-COMMENT ON COLUMN "public"."duty_schedule"."user_id" IS '值班人员ID';
-COMMENT ON COLUMN "public"."duty_schedule"."duty_date" IS '值班日期';
-COMMENT ON COLUMN "public"."duty_schedule"."duty_type" IS '值班类型（normal普通/holiday节假日/emergency应急）';
-COMMENT ON COLUMN "public"."duty_schedule"."shift_type" IS '班次类型（all_day全天/day_shift白班/night_shift夜班/custom自定义）';
-COMMENT ON COLUMN "public"."duty_schedule"."backup_user_id" IS '备班人员ID';
-COMMENT ON COLUMN "public"."duty_schedule"."duty_status" IS '值班状态';
-COMMENT ON COLUMN "public"."duty_schedule"."responsibilities" IS '值班职责描述';
-COMMENT ON TABLE "public"."duty_schedule" IS '值班管理表';
 
--- ----------------------------
--- Records of duty_schedule
--- ----------------------------
-BEGIN;
-COMMIT;
 
 -- ----------------------------
 -- Table structure for gen_table
@@ -3206,12 +3152,7 @@ ALTER SEQUENCE "public"."device_log_check_tracking_id_seq"
 OWNED BY "public"."device_log_check_tracking"."id";
 SELECT setval('"public"."device_log_check_tracking_id_seq"', 75, true);
 
--- ----------------------------
--- Alter sequences owned by
--- ----------------------------
-ALTER SEQUENCE "public"."duty_schedule_duty_id_seq"
-OWNED BY "public"."duty_schedule"."duty_id";
-SELECT setval('"public"."duty_schedule_duty_id_seq"', 1000, false);
+
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -3493,33 +3434,7 @@ CREATE UNIQUE INDEX "unique_device_log_type" ON "public"."device_log_check_track
 -- ----------------------------
 ALTER TABLE "public"."device_log_check_tracking" ADD CONSTRAINT "device_log_check_tracking_pkey" PRIMARY KEY ("id");
 
--- ----------------------------
--- Indexes structure for table duty_schedule
--- ----------------------------
-CREATE INDEX "idx_duty_schedule_backup" ON "public"."duty_schedule" USING btree (
-  "backup_user_id" "pg_catalog"."int8_ops" ASC NULLS LAST
-);
-CREATE INDEX "idx_duty_schedule_date" ON "public"."duty_schedule" USING btree (
-  "duty_date" "pg_catalog"."date_ops" ASC NULLS LAST
-);
-CREATE INDEX "idx_duty_schedule_date_shift" ON "public"."duty_schedule" USING btree (
-  "duty_date" "pg_catalog"."date_ops" ASC NULLS LAST,
-  "shift_type" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
-);
-CREATE INDEX "idx_duty_schedule_status" ON "public"."duty_schedule" USING btree (
-  "duty_status" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
-);
-CREATE INDEX "idx_duty_schedule_type" ON "public"."duty_schedule" USING btree (
-  "duty_type" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
-);
-CREATE INDEX "idx_duty_schedule_user_id" ON "public"."duty_schedule" USING btree (
-  "user_id" "pg_catalog"."int8_ops" ASC NULLS LAST
-);
 
--- ----------------------------
--- Primary Key structure for table duty_schedule
--- ----------------------------
-ALTER TABLE "public"."duty_schedule" ADD CONSTRAINT "duty_schedule_pkey" PRIMARY KEY ("duty_id");
 
 -- ----------------------------
 -- Primary Key structure for table gen_table
@@ -3710,11 +3625,7 @@ ALTER TABLE "public"."alert_info" ADD CONSTRAINT "alert_info_device_id_fkey" FOR
 -- ----------------------------
 ALTER TABLE "public"."device_log_check_tracking" ADD CONSTRAINT "device_log_check_tracking_device_id_fkey" FOREIGN KEY ("device_id") REFERENCES "public"."device_info" ("device_id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
--- ----------------------------
--- Foreign Keys structure for table duty_schedule
--- ----------------------------
-ALTER TABLE "public"."duty_schedule" ADD CONSTRAINT "duty_schedule_backup_user_id_fkey" FOREIGN KEY ("backup_user_id") REFERENCES "public"."sys_user" ("user_id") ON DELETE NO ACTION ON UPDATE NO ACTION;
-ALTER TABLE "public"."duty_schedule" ADD CONSTRAINT "duty_schedule_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."sys_user" ("user_id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+
 
 -- ----------------------------
 -- Foreign Keys structure for table redfish_alert_log

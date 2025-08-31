@@ -193,56 +193,7 @@ comment on column business_hardware_urgency_rules.business_type is '业务类型
 comment on column business_hardware_urgency_rules.hardware_type is '硬件类型（cpu/memory/disk/power/fan/temperature等）';
 comment on column business_hardware_urgency_rules.urgency_level is '紧急程度（urgent紧急/scheduled择期）';
 
--- ----------------------------
--- 5、值班管理表
--- ----------------------------
-drop table if exists duty_schedule;
-create table duty_schedule (
-    duty_id bigserial not null,                      -- 值班ID（主键）
-    user_id bigint not null,                         -- 值班人员ID（外键关联sys_user）
-    duty_date date not null,                         -- 值班日期
-    duty_type varchar(20) default 'normal',          -- 值班类型（normal普通/holiday节假日/emergency应急）
-    shift_type varchar(20) default 'all_day',        -- 班次类型（all_day全天/day_shift白班/night_shift夜班/custom自定义）
-    start_time time,                                 -- 开始时间（自定义班次时使用）
-    end_time time,                                   -- 结束时间（自定义班次时使用）
-    contact_phone varchar(20),                       -- 值班联系电话
-    contact_email varchar(100),                      -- 值班联系邮箱
-    backup_user_id bigint,                           -- 备班人员ID（外键关联sys_user）
-    backup_phone varchar(20),                        -- 备班联系电话
-    duty_status varchar(20) default 'scheduled',     -- 值班状态（scheduled计划/active进行中/completed完成/cancelled取消）
-    location varchar(100),                           -- 值班地点
-    responsibilities text,                           -- 值班职责
-    handover_notes text,                             -- 交接说明
-    actual_start_time timestamp(0),                  -- 实际开始时间
-    actual_end_time timestamp(0),                    -- 实际结束时间
-    create_by varchar(64) default '',                -- 创建者
-    create_time timestamp(0) default current_timestamp, -- 创建时间
-    update_by varchar(64) default '',                -- 更新者
-    update_time timestamp(0) default current_timestamp, -- 更新时间
-    remark varchar(500),                             -- 备注
-    primary key (duty_id),
-    foreign key (user_id) references sys_user(user_id),
-    foreign key (backup_user_id) references sys_user(user_id)
-);
 
--- 创建索引
-create index idx_duty_schedule_user_id on duty_schedule(user_id);
-create index idx_duty_schedule_date on duty_schedule(duty_date);
-create index idx_duty_schedule_status on duty_schedule(duty_status);
-create index idx_duty_schedule_type on duty_schedule(duty_type);
-create index idx_duty_schedule_backup on duty_schedule(backup_user_id);
-create index idx_duty_schedule_date_shift on duty_schedule(duty_date, shift_type);
-
--- 表注释
-comment on table duty_schedule is '值班管理表';
-comment on column duty_schedule.duty_id is '值班ID';
-comment on column duty_schedule.user_id is '值班人员ID';
-comment on column duty_schedule.duty_date is '值班日期';
-comment on column duty_schedule.duty_type is '值班类型（normal普通/holiday节假日/emergency应急）';
-comment on column duty_schedule.shift_type is '班次类型（all_day全天/day_shift白班/night_shift夜班/custom自定义）';
-comment on column duty_schedule.backup_user_id is '备班人员ID';
-comment on column duty_schedule.duty_status is '值班状态';
-comment on column duty_schedule.responsibilities is '值班职责描述';
 
 -- ----------------------------
 -- 初始化业务硬件紧急度规则数据
@@ -280,4 +231,4 @@ alter sequence device_info_device_id_seq restart 1000;
 alter sequence alert_info_alert_id_seq restart 1000;
 alter sequence redfish_alert_log_log_id_seq restart 1000;
 alter sequence business_hardware_urgency_rules_rule_id_seq restart 100;
-alter sequence duty_schedule_duty_id_seq restart 1000; 
+ 
