@@ -172,8 +172,8 @@
       </el-table-column>
       <el-table-column label="操作" align="center" width="180" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
-          <el-tooltip content="查看详情" placement="top">
-            <el-button link type="primary" icon="View" @click="handleUpdate(scope.row)"
+          <el-tooltip content="详情" placement="top">
+            <el-button link type="info" icon="View" @click="handleUpdate(scope.row)"
               v-hasPermi="['redfish:device:query']"></el-button>
           </el-tooltip>
           <el-tooltip content="修改" placement="top">
@@ -185,7 +185,7 @@
               v-hasPermi="['redfish:device:test']"></el-button>
           </el-tooltip>
           <el-tooltip content="业务IP连通性检测" placement="top">
-            <el-button link type="info" icon="Connection" @click="handleCheckConnectivity(scope.row)"
+            <el-button link type="success" icon="Connection" @click="handleCheckConnectivity(scope.row)"
               v-hasPermi="['redfish:device:test']"></el-button>
           </el-tooltip>
           <el-tooltip content="删除" placement="top">

@@ -48,7 +48,9 @@
          </el-table-column>
          <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
             <template #default="scope">
-               <el-button link type="primary" icon="Delete" @click="handleForceLogout(scope.row)" v-hasPermi="['monitor:online:forceLogout']">强退</el-button>
+               <el-tooltip content="强退" placement="top">
+                  <el-button link type="danger" icon="RemoveFilled" @click="handleForceLogout(scope.row)" v-hasPermi="['monitor:online:forceLogout']"></el-button>
+               </el-tooltip>
             </template>
          </el-table-column>
       </el-table>

@@ -93,9 +93,15 @@
       </el-table-column>
               <el-table-column label="操作" align="center" class-name="small-padding fixed-width" width="160">
           <template #default="scope">
-            <el-button link type="info" icon="View" @click="handleView(scope.row)" v-hasPermi="['redfish:hardwareType:query']"></el-button>
-            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['redfish:hardwareType:edit']"></el-button>
-            <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row, scope.$index)" v-hasPermi="['redfish:hardwareType:remove']"></el-button>
+            <el-tooltip content="详情" placement="top">
+              <el-button link type="info" icon="View" @click="handleView(scope.row)" v-hasPermi="['redfish:hardwareType:query']"></el-button>
+            </el-tooltip>
+            <el-tooltip content="修改" placement="top">
+              <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['redfish:hardwareType:edit']"></el-button>
+            </el-tooltip>
+            <el-tooltip content="删除" placement="top">
+              <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row, scope.$index)" v-hasPermi="['redfish:hardwareType:remove']"></el-button>
+            </el-tooltip>
           </template>
         </el-table-column>
     </el-table>

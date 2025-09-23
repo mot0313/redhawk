@@ -265,27 +265,34 @@
         v-if="columns[8].visible"
       >
           <template #default="scope">
+            <el-tooltip content="详情" placement="top">
             <el-button
               link
-              type="primary"
+              type="info"
               icon="View"
               @click="handleDetail(scope.row)"
             ></el-button>
-            <el-button
+            </el-tooltip>
+
+            <el-tooltip content="安排维修时间" placement="top">
+              <el-button
               v-if="scope.row.alertStatus === 'active'"
               link
-              type="warning"
+              type="primary"
               icon="Calendar"
               @click="handleScheduleMaintenance(scope.row)"
               v-hasPermi="['redfish:alert:maintenance']"
             ></el-button>
-            <el-button
+            </el-tooltip>
+            <el-tooltip content="删除" placement="top">
+              <el-button
               link
               type="danger"
               icon="Delete"
               @click="handleDelete(scope.row)"
               v-hasPermi="['redfish:alert:remove']"
             ></el-button>
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
