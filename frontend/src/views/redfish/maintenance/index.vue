@@ -29,7 +29,7 @@ import HardwareType from './hardwareType.vue';
 import UrgencyRule from './urgencyRule.vue';
 
 // Tab切换状态，默认激活业务类型管理
-const activeTab = ref('businessType');
+const activeTab = ref('urgencyRule');
 
 /** Tab切换处理 */
 function handleTabClick(tab) {
