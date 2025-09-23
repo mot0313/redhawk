@@ -83,6 +83,24 @@ export const constantRoutes = [
         meta: { title: '个人中心', icon: 'user' }
       }
     ]
+  },
+  {
+    path: '/notice',
+    component: Layout,
+    hidden: true,
+    redirect: 'noredirect',
+    children: [
+      {
+        path: 'detail/:id',
+        component: () => import('@/views/system/notice/detail'),
+        name: 'NoticeDetail',
+        meta: { 
+          title: '通知详情', 
+          icon: 'message',
+          permissions: ['system:notice:query']
+        }
+      }
+    ]
   }
 ]
 

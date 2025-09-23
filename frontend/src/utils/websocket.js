@@ -306,8 +306,11 @@ class WebSocketService {
    * 检查消息是否重复
    */
   isDuplicateMessage(message) {
-    // 对于监控相关的消息，使用timestamp和type作为唯一标识
-    if (message.type === 'monitoring_started' || message.type === 'monitoring_completed' || message.type === 'monitor_task') {
+    // 对于监控相关的消息和通知消息，使用timestamp和type作为唯一标识
+    if (message.type === 'monitoring_started' || 
+        message.type === 'monitoring_completed' || 
+        message.type === 'monitor_task' ||
+        message.type === 'new_notice') {
       const messageKey = `${message.type}_${message.timestamp}`
       
       if (this.messageCache.has(messageKey)) {
@@ -369,6 +372,10 @@ class WebSocketService {
         
       case 'monitoring_progress':
         this.handleMonitoringProgress(message)
+        break
+        
+      case 'new_notice':
+        this.emitEvent('new_notice', message)
         break
         
       // 新增消息类型处理

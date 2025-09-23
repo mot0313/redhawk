@@ -1,5 +1,6 @@
 <template>
   <div class="dashboard-container">
+    <div class="dashboard-layout">
     <!-- 悬浮控制面板 -->
     <div 
       class="floating-control-panel"
@@ -77,7 +78,9 @@
       </el-button>
             </div>
     
-    <!-- 统计卡片区域 -->
+    <!-- 主要内容区域 -->
+    <div class="main-content">
+      <!-- 统计卡片区域 -->
     <el-row :gutter="20" class="mb-20">
       <el-col :span="6">
         <el-card class="stat-card">
@@ -221,7 +224,6 @@
       </el-col>
     </el-row>
 
-
     <!-- 图表区域 -->
     <el-row :gutter="20">
       <el-col :span="12">
@@ -249,6 +251,14 @@
       </el-col>
     </el-row>
     
+    </div>
+    
+    <!-- 右侧通知公告侧边栏 -->
+    <div class="notice-sidebar">
+      <NoticeCard :display-count="12" :refresh-interval="5" class="notice-sidebar-card" />
+    </div>
+    
+    </div>
   </div>
 </template>
 
@@ -260,6 +270,7 @@ import { getDashboardOverview, getAlertTrend, getDeviceHealth, getRealtimeAlerts
 import { triggerMonitor } from '@/api/redfish/monitor'
 import websocketService from '@/utils/websocket'
 import { ElNotification, ElMessage } from 'element-plus'
+import NoticeCard from '@/components/NoticeCard.vue'
 
 // 响应式数据
 const overviewData = ref({
@@ -1498,6 +1509,42 @@ const initializeWebSocketConnection = () => {
 
 .stat-card {
   height: 120px;
+}
+
+/* 页面布局样式 */
+.dashboard-layout {
+  display: flex;
+  gap: 20px;
+}
+
+.main-content {
+  flex: 1;
+}
+
+.notice-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+}
+
+.notice-sidebar-card {
+  position: sticky;
+  top: 20px;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .dashboard-layout {
+    flex-direction: column;
+  }
+  
+  .notice-sidebar {
+    width: 100%;
+    order: -1; /* 在小屏幕上将通知公告移到顶部 */
+  }
+  
+  .notice-sidebar-card {
+    position: static;
+  }
 }
 
 .stat-content {

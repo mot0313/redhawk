@@ -162,6 +162,37 @@ class RealtimePushService:
             logger.error(f"Error pushing system notification: {str(e)}")
     
     @staticmethod
+    async def push_notice_notification(notice_data: Dict[str, Any], action: str = "notice_published"):
+        """
+        推送通知公告更新
+        
+        Args:
+            notice_data: 通知公告数据
+            action: 操作类型（notice_published, notice_updated, notice_deleted）
+        """
+        try:
+            # 确保Redis连接
+            await RealtimePushService._ensure_redis_connection()
+            
+            message = {
+                "type": "new_notice",
+                "action": action,
+                "notice": notice_data,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # 推送到dashboard房间，所有在首页的用户都能接收
+            await websocket_manager.broadcast_to_room("dashboard", message)
+            
+            # 通过Redis发布，确保跨进程通信
+            await websocket_manager.publish_redis_message("websocket:dashboard", message)
+            
+            logger.info(f"Pushed notice notification: {action} - {notice_data.get('notice_title')}")
+            
+        except Exception as e:
+            logger.error(f"Error pushing notice notification: {str(e)}")
+    
+    @staticmethod
     async def push_monitoring_task_status(task_id: str, status: str, progress: Optional[Dict[str, Any]] = None):
         """
         推送监控任务状态更新
