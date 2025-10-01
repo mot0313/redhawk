@@ -20,9 +20,8 @@ _BASIC_MAP = {
     "network": "network",         # --nic: 网络接口
     "bmc": "bmc",                 # --bmc: BMC管理器
     "firmware": "firmware",       # --firmware: 固件信息
-    "connectivity": "downtime",     # 连通性 -> downtime
-    "availability": "downtime",     # 设备可用性 -> downtime
-    "downtime": "downtime",         # 宕机检测
+    "downtime": "downtime",         # 宕机检测（业务IP连通性）
+    "oob_connectivity": "oob_connectivity",  # 带外IP连通性
 }
 
 

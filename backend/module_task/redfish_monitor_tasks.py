@@ -7,15 +7,15 @@ import asyncio
 from datetime import datetime
 from typing import Dict, Any
 from loguru import logger
-from module_redfish.celery_tasks import monitor_all_devices, check_all_devices_availability, cleanup_old_logs
+from module_redfish.celery_tasks import monitor_all_devices, cleanup_old_logs
 from module_redfish.core.websocket_manager import websocket_manager
 
 
 def redfish_device_monitor_job(*args, **kwargs):
     """
-    设备全面监控定时任务执行函数 - 同步版本
+    设备监控定时任务执行函数 - 同步版本
     该函数会被APScheduler调用，任务配置由sys_job表管理
-    同时执行硬件健康监控和宕机检测，提供完整的设备状态监控
+    执行统一的设备监控任务，包括硬件状态和连通性检测
     
     Args:
         *args: 位置参数（来自sys_job.job_args）
@@ -28,37 +28,30 @@ def redfish_device_monitor_job(*args, **kwargs):
         # 记录任务执行时间
         execution_time = datetime.now()
         
-        # 提交硬件监控Celery异步任务
-        hardware_result = monitor_all_devices.delay()
+        # 提交统一监控Celery异步任务（包含硬件状态和连通性检测）
+        monitor_result = monitor_all_devices.delay()
         
-        # 提交宕机检测Celery异步任务
-        downtime_result = check_all_devices_availability.delay()
+        logger.info(f"设备监控Celery任务已提交，任务ID: {monitor_result.id}")
         
-        logger.info(f"设备硬件监控Celery任务已提交，任务ID: {hardware_result.id}")
-        logger.info(f"设备宕机检测Celery任务已提交，任务ID: {downtime_result.id}")
-        
-        # 创建异步任务进行WebSocket广播（硬件监控）
+        # 创建异步任务进行WebSocket广播
         try:
             # 检查是否有运行的事件循环
             loop = asyncio.get_running_loop()
             # 在已有循环中创建任务
-            loop.create_task(_broadcast_monitor_start(execution_time, hardware_result.id))
-            loop.create_task(_broadcast_downtime_check_start(execution_time, downtime_result.id))
+            loop.create_task(_broadcast_monitor_start(execution_time, monitor_result.id))
         except RuntimeError:
             # 如果没有运行的事件循环，在线程中运行
             import threading
             def run_broadcast():
-                asyncio.run(_broadcast_monitor_start(execution_time, hardware_result.id))
-                asyncio.run(_broadcast_downtime_check_start(execution_time, downtime_result.id))
+                asyncio.run(_broadcast_monitor_start(execution_time, monitor_result.id))
             threading.Thread(target=run_broadcast, daemon=True).start()
         
         # 返回执行结果
         return {
             "success": True,
-            "hardware_task_id": hardware_result.id,
-            "downtime_task_id": downtime_result.id,
+            "monitor_task_id": monitor_result.id,
             "execution_time": execution_time.isoformat(),
-            "message": "设备全面监控任务执行成功（硬件+宕机检测）"
+            "message": "设备监控任务执行成功（硬件状态+连通性检测）"
         }
         
     except Exception as e:
@@ -103,18 +96,7 @@ def device_downtime_monitor_job(*args, **kwargs):
         
         logger.info(f"设备宕机检测Celery任务已提交，任务ID: {result.id}")
         
-        # 创建异步任务进行WebSocket广播
-        try:
-            # 检查是否有运行的事件循环
-            loop = asyncio.get_running_loop()
-            # 在已有循环中创建任务
-            loop.create_task(_broadcast_downtime_check_start(execution_time, result.id))
-        except RuntimeError:
-            # 如果没有运行的事件循环，在线程中运行
-            import threading
-            def run_broadcast():
-                asyncio.run(_broadcast_downtime_check_start(execution_time, result.id))
-            threading.Thread(target=run_broadcast, daemon=True).start()
+        # 注意: 已删除独立的宕机检测任务，现在统一在monitor_all_devices中处理
         
         # 返回执行结果
         return {
@@ -128,15 +110,7 @@ def device_downtime_monitor_job(*args, **kwargs):
         error_msg = f"执行设备宕机检测任务失败: {str(e)}"
         logger.error(error_msg)
         
-        # 创建异步任务进行错误广播
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_broadcast_downtime_check_error(error_msg))
-        except RuntimeError:
-            import threading
-            def run_error_broadcast():
-                asyncio.run(_broadcast_downtime_check_error(error_msg))
-            threading.Thread(target=run_error_broadcast, daemon=True).start()
+        # 错误处理: 已简化为统一监控任务
         
         # 重新抛出异常，让APScheduler记录
         raise e
@@ -262,54 +236,10 @@ async def _broadcast_monitor_error(error_message: str):
         logger.error(f"广播监控任务错误通知失败: {str(e)}")
 
 
-async def _broadcast_downtime_check_start(execution_time: datetime, task_id: str):
-    """
-    广播宕机检测任务开始通知
-    
-    Args:
-        execution_time: 执行时间
-        task_id: 任务ID
-    """
-    try:
-        message = {
-            "type": "downtime_check_task",
-            "action": "started",
-            "task_id": task_id,
-            "execution_time": execution_time.isoformat(),
-            "message": "设备宕机检测任务已开始执行",
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        # 广播到dashboard房间
-        await websocket_manager.broadcast_to_room("dashboard", message)
-        logger.debug("已广播宕机检测任务开始通知")
-        
-    except Exception as e:
-        logger.error(f"广播宕机检测任务开始通知失败: {str(e)}")
+# 已删除 _broadcast_downtime_check_start 函数
 
 
-async def _broadcast_downtime_check_error(error_message: str):
-    """
-    广播宕机检测任务错误通知
-    
-    Args:
-        error_message: 错误信息
-    """
-    try:
-        message = {
-            "type": "downtime_check_task",
-            "action": "error",
-            "error": error_message,
-            "message": f"设备宕机检测任务执行失败: {error_message}",
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        # 广播到dashboard房间
-        await websocket_manager.broadcast_to_room("dashboard", message)
-        logger.debug("已广播宕机检测任务错误通知")
-        
-    except Exception as e:
-        logger.error(f"广播宕机检测任务错误通知失败: {str(e)}")
+# 已删除 _broadcast_downtime_check_error 函数
 
 
 

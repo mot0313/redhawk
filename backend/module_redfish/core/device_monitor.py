@@ -31,7 +31,7 @@ class DeviceMonitor:
             "power": "power",
             "temperatures": "temperature",
             "fans": "fan",
-            "connectivity": "downtime"
+            "downtime": "downtime"
         }
     
     def _get_component_status(self, component_data: Dict[str, Any]) -> Tuple[str, str]:
@@ -62,17 +62,50 @@ class DeviceMonitor:
         Returns:
             Dict: 监控结果（已移除日志生成）
         """
+        alerts = []
+        all_components = []
+        overall_health = "unknown"
+        status_data = {}
+        
+        # 首先执行连通性检测（独立于redfish接口）
+        connectivity_alerts, connectivity_components, connectivity_status = await self._check_connectivity(device_info)
+        alerts.extend(connectivity_alerts)
+        all_components.extend(connectivity_components)
+        
+        # 检查带外连通性，决定是否执行硬件检查
+        oob_ip_online = connectivity_status.get('oob_ip_online', False)
+        
+        if not oob_ip_online:
+            # 带外IP不通，跳过硬件检查，直接返回连通性检测结果
+            logger.info(f"设备 {device_info.get('hostname', 'Unknown')} 带外IP不通，跳过硬件检查")
+            return {
+                "device_id": device_info['device_id'],
+                "success": True,  # 连通性检测成功
+                "timestamp": datetime.now().isoformat(),
+                "overall_health": self._calculate_overall_health_from_components(all_components),
+                "alerts": alerts,
+                "all_components": all_components,
+                "error": "带外IP不通，跳过硬件检查",
+                "raw_data": {}
+            }
+        
+        # 带外IP连通，继续执行硬件检查
         try:
             # 解密密码
             try:
                 password = decrypt_password(device_info.get('redfish_password', ''))
             except ValueError as e:
                 logger.error(f"设备 {device_info.get('hostname', 'Unknown')} 密码解密失败: {str(e)}")
+                # 密码解密失败，但连通性检测已完成，返回连通性结果
                 return {
                     "device_id": device_info['device_id'],
-                    "success": False,
-                    "error": "设备密码解密失败，请重新设置密码",
-                    "alerts": []
+                    "success": True,  # 连通性检测成功
+                    "timestamp": datetime.now().isoformat(),
+                    "overall_health": self._calculate_overall_health_from_components(all_components),
+                    "alerts": alerts,
+                    "all_components": all_components,
+                    "error": "设备密码解密失败，只执行了连通性检测",
+                    "raw_data": {}
                 }
             
             # 创建redfish客户端
@@ -119,49 +152,56 @@ class DeviceMonitor:
             except Exception:
                 pass
             
-            if not status_data:
-                return {
-                    "device_id": device_info['device_id'],
-                    "success": False,
-                    "error": "Failed to get device status",
-                    "alerts": []
-                }
-            
-            # 分析状态并生成告警（不再生成日志）
-            alerts, all_components = await self._analyze_status(device_info, status_data)
+            if status_data:
+                # 分析硬件状态并生成告警
+                hardware_alerts, hardware_components = await self._analyze_hardware_status(device_info, status_data)
+                alerts.extend(hardware_alerts)
+                all_components.extend(hardware_components)
+                overall_health = self._calculate_overall_health(status_data)
+            else:
+                logger.warning(f"设备 {device_info.get('hostname', 'Unknown')} 未获取到硬件状态数据")
+                overall_health = self._calculate_overall_health_from_components(all_components)
             
             return {
                 "device_id": device_info['device_id'],
                 "success": True,
                 "timestamp": datetime.now().isoformat(),
-                 "overall_health": self._calculate_overall_health(status_data),
+                "overall_health": overall_health,
                 "alerts": alerts,
                 "all_components": all_components,
                 "raw_data": status_data
             }
             
         except Exception as e:
-            logger.error(f"Error monitoring device {device_info.get('hostname', 'Unknown')}: {str(e)}")
+            logger.error(f"Error monitoring device hardware {device_info.get('hostname', 'Unknown')}: {str(e)}")
+            # redfish连接失败，但连通性检测已完成，返回连通性结果
             return {
                 "device_id": device_info['device_id'],
-                "success": False,
-                "error": str(e),
-                "alerts": []
+                "success": True,  # 连通性检测成功
+                "timestamp": datetime.now().isoformat(),
+                "overall_health": self._calculate_overall_health_from_components(all_components),
+                "alerts": alerts,
+                "all_components": all_components,
+                "error": f"硬件监控失败: {str(e)}，但连通性检测已完成",
+                "raw_data": {}
             }
     
-    async def _analyze_status(self, device_info: Dict[str, Any], status_data: Dict[str, Any]) -> Tuple[List[Dict], List[Dict]]:
+    async def _check_connectivity(self, device_info: Dict[str, Any]) -> Tuple[List[Dict], List[Dict], Dict[str, bool]]:
         """
-        分析设备状态，生成告警，并返回所有组件的健康状态
+        检查设备连通性（独立于redfish接口）
         
         Args:
             device_info: 设备信息
-            status_data: 状态数据
             
         Returns:
-            Tuple[List[Dict], List[Dict]]: (告警列表, 所有组件状态列表)
+            Tuple[List[Dict], List[Dict], Dict[str, bool]]: (告警列表, 组件状态列表, 连通性状态)
         """
         alerts = []
-        all_components = []
+        components = []
+        connectivity_status = {
+            "business_ip_online": False,
+            "oob_ip_online": False
+        }
         
         # 检查业务IP连通性
         business_ip = device_info.get('business_ip')
@@ -173,6 +213,7 @@ class DeviceMonitor:
                 
                 # 根据连通性结果生成组件状态
                 is_online = connectivity_result.get('online', False)
+                connectivity_status["business_ip_online"] = is_online
                 health_status = 'OK' if is_online else 'Critical'
                 
                 component_status = {
@@ -180,7 +221,7 @@ class DeviceMonitor:
                     "component_name": "宕机",
                     "health_status": self._normalize_health_status(health_status)
                 }
-                all_components.append(component_status)
+                components.append(component_status)
                 
                 # 如果离线，生成告警
                 if not is_online:
@@ -205,7 +246,229 @@ class DeviceMonitor:
                     "component_name": "宕机",
                     "health_status": "unknown"
                 }
+                components.append(component_status)
+        
+        # 检查带外IP连通性
+        oob_ip = device_info.get('oob_ip')
+        if oob_ip:
+            try:
+                oob_connectivity_result = await ConnectivityService.check_device_oob_ip_connectivity(
+                    db=None, oob_ip=oob_ip
+                )
+                
+                # 根据连通性结果生成组件状态
+                is_online = oob_connectivity_result.get('online', False)
+                connectivity_status["oob_ip_online"] = is_online
+                health_status = 'OK' if is_online else 'Critical'
+                
+                component_status = {
+                    "component_type": "OOB_Connectivity",
+                    "component_name": "带外连通性",
+                    "health_status": self._normalize_health_status(health_status)
+                }
+                components.append(component_status)
+                
+                # 如果离线，生成告警
+                if not is_online:
+                    alert_entry = {
+                        "device_id": device_info['device_id'],
+                        "alert_source": "oob_connectivity_detection",
+                        "component_type": "OOB_Connectivity",
+                        "component_name": "带外连通性",
+                        "health_status": self._normalize_health_status(health_status),
+                        "urgency_level": self._map_health_to_urgency_level(health_status),
+                        "alert_message": f"带外IP连通性告警: 带外IP {oob_ip} 无法连通 - {oob_connectivity_result.get('error', '连接失败')}",
+                        "first_occurrence": datetime.now(),
+                        "raw_data": json.dumps(oob_connectivity_result)
+                    }
+                    alerts.append(alert_entry)
+                    
+            except Exception as e:
+                logger.error(f"Error checking OOB IP connectivity for {oob_ip}: {str(e)}")
+                # 连通性检查失败时，记录为未知状态
+                component_status = {
+                    "component_type": "OOB_Connectivity",
+                    "component_name": "带外连通性",
+                    "health_status": "unknown"
+                }
+                components.append(component_status)
+        
+        return alerts, components, connectivity_status
+    
+    async def _analyze_hardware_status(self, device_info: Dict[str, Any], status_data: Dict[str, Any]) -> Tuple[List[Dict], List[Dict]]:
+        """
+        分析硬件状态，生成告警
+        
+        Args:
+            device_info: 设备信息
+            status_data: 硬件状态数据
+            
+        Returns:
+            Tuple[List[Dict], List[Dict]]: (告警列表, 组件状态列表)
+        """
+        alerts = []
+        all_components = []
+        
+        # 分析系统整体状态
+        system_info = status_data.get('system_info', {})
+        if system_info:
+            component_status, alert = self._analyze_system_health(device_info, system_info)
+            if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], system_info)
                 all_components.append(component_status)
+            if alert:
+                alerts.append(alert)
+        
+        # 分析处理器状态
+        processors = status_data.get('processors', [])
+        for processor in processors:
+            component_status, alert = self._analyze_processor_health(device_info, processor)
+            if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], processor)
+                all_components.append(component_status)
+            if alert:
+                alerts.append(alert)
+        
+        # 分析内存状态
+        memory = status_data.get('memory', [])
+        total_memory_gb = 0
+        failed_memory_count = 0
+        
+        for mem in memory:
+            component_status, alert = self._analyze_memory_health(device_info, mem)
+            if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], mem)
+                all_components.append(component_status)
+            if alert:
+                alerts.append(alert)
+        try:
+            mem_comp = [c for c in all_components if c.get('component_type') == 'memory']
+            mem_bad = [c for c in mem_comp if c.get('health_status') in ('warning', 'critical')]
+            logger.info("Memory analyzed | components={} abnormal={}", len(mem_comp), len(mem_bad))
+        except Exception:
+            pass
+            
+        # 生成内存汇总告警（如果有多个内存故障）
+        try:
+            critical_memory_count = len([
+                comp for comp in all_components 
+                if comp.get('component_type') == 'memory' and comp.get('health_status') in ('critical', 'warning')
+            ])
+            
+            total_memory_count = len([
+                comp for comp in all_components 
+                if comp.get('component_type') == 'memory'
+            ])
+            
+            if critical_memory_count >= 2:  # 如果有2个或以上内存模块异常
+                # 添加内存汇总告警
+                if total_memory_count > 0:
+                    summary_component = {
+                        "component_type": to_hardware_code("memory", {}),
+                        "component_name": "MemorySummary",
+                        "health_status": "critical" if critical_memory_count >= total_memory_count // 2 else "warning"
+                    }
+                    all_components.append(summary_component)
+                    
+                    alert_entry = {
+                        "device_id": device_info['device_id'],
+                        "alert_source": "redfish",
+                        "component_type": summary_component["component_type"],
+                        "component_name": "MemorySummary",
+                        "health_status": summary_component["health_status"],
+                        "urgency_level": self._map_health_to_urgency_level(summary_component["health_status"]),
+                        "alert_message": f"内存模块汇总告警: {critical_memory_count}/{total_memory_count} 模块异常",
+                        "first_occurrence": datetime.now(),
+                        "raw_data": json.dumps({"critical_count": critical_memory_count, "total_count": total_memory_count})
+                    }
+                    alerts.append(alert_entry)
+        except Exception as e:
+            logger.warning(f"Error generating memory summary alert: {str(e)}")
+        
+        # 分析存储状态
+        storage = status_data.get('storage', [])
+        for stor in storage:
+            component_status, alert = self._analyze_storage_health(device_info, stor)
+            if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], stor)
+                all_components.append(component_status)
+            if alert:
+                alerts.append(alert)
+        
+        # 分析电源状态
+        power = status_data.get('power', [])
+        for pwr in power:
+            component_status, alert = self._analyze_power_health(device_info, pwr)
+            if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], pwr)
+                all_components.append(component_status)
+            if alert:
+                alerts.append(alert)
+        
+        # 分析温度状态
+        temperatures = status_data.get('temperatures', [])
+        for temp in temperatures:
+            component_status, alert = self._analyze_temperature_health(device_info, temp)
+            if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], temp)
+                all_components.append(component_status)
+            if alert:
+                alerts.append(alert)
+        
+        # 分析风扇状态
+        fans = status_data.get('fans', [])
+        for fan in fans:
+            component_status, alert = self._analyze_fan_health(device_info, fan)
+            if component_status:
+                component_status["component_type"] = to_hardware_code(component_status["component_type"], fan)
+                all_components.append(component_status)
+            if alert:
+                alerts.append(alert)
+        
+        return alerts, all_components
+    
+    def _calculate_overall_health_from_components(self, components: List[Dict]) -> str:
+        """
+        根据组件状态计算整体健康状态
+        
+        Args:
+            components: 组件状态列表
+            
+        Returns:
+            str: 整体健康状态
+        """
+        if not components:
+            return "unknown"
+        
+        health_statuses = [comp.get('health_status', 'unknown') for comp in components]
+        
+        # 如果有任何critical状态，整体为critical
+        if 'critical' in health_statuses:
+            return 'critical'
+        # 如果有任何warning状态，整体为warning
+        elif 'warning' in health_statuses:
+            return 'warning'
+        # 如果都是ok，整体为ok
+        elif all(status == 'ok' for status in health_statuses):
+            return 'ok'
+        else:
+            return 'unknown'
+    
+    async def _analyze_status(self, device_info: Dict[str, Any], status_data: Dict[str, Any]) -> Tuple[List[Dict], List[Dict]]:
+        """
+        分析设备状态，生成告警，并返回所有组件的健康状态
+        
+        Args:
+            device_info: 设备信息
+            status_data: 状态数据
+            
+        Returns:
+            Tuple[List[Dict], List[Dict]]: (告警列表, 所有组件状态列表)
+        """
+        alerts = []
+        all_components = []
+        
+        # 注意：连通性检测已移到monitor_device方法的_check_connectivity中，此处不再重复检测
         
         # 分析系统整体状态
         system_info = status_data.get('system_info', {})

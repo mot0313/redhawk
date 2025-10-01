@@ -14,7 +14,6 @@ import redis
 import json
 
 from .core.device_monitor import DeviceMonitor
-from .core.availability_monitor import DeviceAvailabilityMonitor
 from config.get_db import get_sync_db
 from .entity.do import DeviceInfoDO, AlertInfoDO, BusinessHardwareUrgencyRulesDO
 from .core.realtime_service import PushServiceManager
@@ -464,10 +463,58 @@ def save_monitoring_result(result: Dict[str, Any], device_info: Dict[str, Any]):
         alerts_to_create = []
         alerts_to_resolve = []
         
-        # 遍历当前监控到的所有组件
+        # 记录已经处理过的组件，避免重复处理
+        processed_components = set()
+        
+        # 1. 首先处理直接生成的告警数据（如宕机检测、带外IP连通性等）
+        direct_alerts = result.get('alerts', [])
+        for alert_data in direct_alerts:
+            component_type = alert_data.get('component_type')
+            component_name = alert_data.get('component_name')
+            health_status = alert_data.get('health_status')
+            alert_message = alert_data.get('alert_message', '')
+            
+            # 应用组件类型映射
+            normalized_component_type = to_hardware_code(component_type, alert_data)
+            alert_key = (normalized_component_type, component_name)
+            
+            # 记录已处理的组件
+            processed_components.add(alert_key)
+            
+            existing_alert = active_alerts_map.get(alert_key)
+            
+            if not existing_alert:
+                # 新的直接告警
+                urgency_level = urgency_rules_map.get((business_type, normalized_component_type.lower()), 'scheduled')
+                
+                new_alert = AlertInfoDO(
+                    device_id=device_id,
+                    component_type=normalized_component_type,
+                    component_name=component_name,
+                    health_status=health_status,
+                    urgency_level=urgency_level,
+                    alert_status='active',
+                    first_occurrence=datetime.now(),
+                    last_occurrence=datetime.now()
+                )
+                alerts_to_create.append(new_alert)
+                logger.info(f"New direct alert for device {device_id}: {normalized_component_type}/{component_name} -> {health_status}, Urgency: {urgency_level}")
+            else:
+                # 更新现有的直接告警
+                existing_alert.last_occurrence = datetime.now()
+                # 从map中移除，代表已处理
+                active_alerts_map.pop(alert_key)
+                logger.info(f"Updated direct alert for device {device_id}: {normalized_component_type}/{component_name}")
+        
+        # 2. 然后遍历当前监控到的所有组件状态（跳过已处理的组件）
         for (component_type, component_name), component_data in monitored_components_map.items():
             health_status = component_data['health_status']
             alert_key = (component_type, component_name)
+            
+            # 跳过已经在直接告警中处理过的组件
+            if alert_key in processed_components:
+                logger.debug(f"Skipping already processed component: {component_type}/{component_name}")
+                continue
             
             existing_alert = active_alerts_map.get(alert_key)
             
@@ -857,303 +904,15 @@ def recalculate_urgency_for_rule_change(business_type: str, hardware_type: str):
 
 
 # ===============================================================
-# 设备可用性检测任务（基于业务IP连通性）
+# 删除了冗余的设备可用性检测任务
+# 现在统一在 DeviceMonitor 中进行业务IP连通性检测
 # ===============================================================
 
-@celery_app.task(bind=True, name='check_device_availability')
-def check_device_availability(self, device_info: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    检测单个设备的可用性状态（基于业务IP连通性）
-    
-    Args:
-        device_info: 设备信息字典
-        
-    Returns:
-        Dict: 可用性检测结果
-    """
-    try:
-        logger.info(f"开始可用性检测任务 | 设备: {device_info.get('hostname', 'Unknown')}")
-        
-        # 创建可用性监控器
-        availability_monitor = DeviceAvailabilityMonitor()
-        
-        # 执行异步可用性检测（在同步任务中运行异步代码）
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            result = loop.run_until_complete(availability_monitor.check_device_availability(device_info))
-        finally:
-            loop.close()
-        
-        # 保存检测结果到数据库
-        if result.get('success', False):
-            save_availability_result(result, device_info)
-            
-            # 推送可用性状态变化到WebSocket客户端
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(push_service.realtime.push_device_availability_change(
-                    device_id=result.get('device_id'),
-                    availability_status=result.get('availability_status', 'unknown'),
-                    device_info=device_info
-                ))
-            except RuntimeError:
-                # 如果没有运行的事件循环，跳过推送
-                logger.warning("No event loop running, skipping availability WebSocket push")
-        
-        logger.info(f"完成可用性检测任务 | 设备: {device_info.get('hostname', 'Unknown')}")
-        
-        # 检查是否是批次任务，如果是则更新计数器
-        batch_id = device_info.get('batch_id')
-        if batch_id:
-            check_batch_completion(batch_id, result.get('success', False))
-        
-        return result
-        
-    except Exception as e:
-        logger.error(f"可用性检测任务异常 | 设备 {device_info.get('hostname', 'Unknown')}: {str(e)}")
-        self.retry(countdown=60, max_retries=3)  # 1分钟后重试，最多3次
+
+# 已删除 check_all_devices_availability 任务
 
 
-@celery_app.task(name='check_all_devices_availability')
-def check_all_devices_availability() -> Dict[str, Any]:
-    """
-    检测所有启用监控的设备的可用性状态
-    
-    Returns:
-        Dict: 批量可用性检测结果
-    """
-    try:
-        logger.info("开始批量设备可用性检测任务")
-        
-        # 获取数据库会话
-        db = next(get_sync_db())
-        
-        # 查询所有启用监控且有业务IP的设备
-        devices = db.query(DeviceInfoDO).filter(
-            DeviceInfoDO.monitor_enabled == 1,
-            DeviceInfoDO.business_ip.is_not(None),
-            DeviceInfoDO.business_ip != ''
-        ).all()
-        
-        if not devices:
-            logger.warning("未找到需要进行可用性检测的设备")
-            return {
-                "success": True,
-                "message": "No devices to check availability",
-                "total_devices": 0,
-                "results": []
-            }
-        
-        logger.info(f"找到 {len(devices)} 个设备需要进行可用性检测")
-        
-        # 将设备信息转换为字典格式
-        device_list = []
-        for device in devices:
-            device_dict = {
-                "device_id": device.device_id,
-                "hostname": device.hostname,
-                "business_ip": device.business_ip,
-                "oob_ip": device.oob_ip,
-                "business_type": device.business_type,
-                "manufacturer": device.manufacturer,
-                "model": device.model
-            }
-            device_list.append(device_dict)
-        
-        # 生成批次ID
-        import uuid
-        batch_id = str(uuid.uuid4())
-        
-        # 在Redis中设置计数器，用于跟踪任务完成情况
-        from config.get_redis import get_redis
-        redis_client = get_redis()
-        counter_key = f"availability_batch:{batch_id}:counter"
-        total_key = f"availability_batch:{batch_id}:total"
-        success_key = f"availability_batch:{batch_id}:success"
-        failed_key = f"availability_batch:{batch_id}:failed"
-        
-        redis_client.set(counter_key, 0, ex=3600)  # 1小时过期
-        redis_client.set(total_key, len(device_list), ex=3600)
-        redis_client.set(success_key, 0, ex=3600)
-        redis_client.set(failed_key, 0, ex=3600)
-        
-        # 为每个设备添加batch_id
-        for device_dict in device_list:
-            device_dict['batch_id'] = batch_id
-        
-        # 创建并分发可用性检测任务到任务队列
-        task_signatures = [
-            check_device_availability.s(device_dict) 
-            for device_dict in device_list
-        ]
-        
-        # 并行执行所有任务
-        job = group(task_signatures)
-        result = job.apply_async()
-        
-        # 推送批次开始通知
-        batch_start_message = {
-            "type": "availability_batch_started",
-            "data": {
-                "batch_id": batch_id,
-                "total_devices": len(device_list),
-                "device_count_by_status": {
-                    "pending": len(device_list),
-                    "completed": 0,
-                    "failed": 0
-                }
-            },
-            "message": f"开始批量可用性检测 - {len(device_list)} 个设备",
-            "timestamp": datetime.now().isoformat()
-        }
-        publish_sync_redis_message("websocket:availability", batch_start_message)
-        
-        logger.info(f"已分发 {len(device_list)} 个可用性检测任务，批次ID: {batch_id}")
-        
-        return {
-            "success": True,
-            "batch_id": batch_id,
-            "total_devices": len(device_list),
-            "message": f"Availability check tasks dispatched for {len(device_list)} devices",
-            "task_group_id": result.id if result else None
-        }
-        
-    except Exception as e:
-        logger.error(f"批量可用性检测任务失败: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Batch availability check failed"
-        }
-    finally:
-        if 'db' in locals():
-            db.close()
-
-
-def save_availability_result(result: Dict[str, Any], device_info: Dict[str, Any]):
-    """
-    保存设备可用性检测结果，并根据业务规则生成告警
-    
-    Args:
-        result: 可用性检测结果
-        device_info: 设备信息
-    """
-    db = next(get_sync_db())
-    try:
-        device_id = device_info['device_id']
-        business_type = device_info.get('business_type', '')
-        
-        logger.info(f"保存设备可用性结果 | device_id={device_id}")
-        
-        # 1. 更新设备最后检查时间
-        device = db.query(DeviceInfoDO).filter(DeviceInfoDO.device_id == device_id).first()
-        if device:
-            device.last_check_time = datetime.now()
-            
-            # 根据可用性状态更新设备健康状态
-            availability_status = result.get('availability_status', 'unknown')
-            if availability_status == 'online':
-                # 可用性正常，不影响现有健康状态（除非之前是因为宕机导致的critical）
-                if device.health_status == 'critical':
-                    # 检查是否还有其他critical告警
-                    other_critical_alerts = db.query(AlertInfoDO).filter(
-                        AlertInfoDO.device_id == device_id,
-                        AlertInfoDO.alert_status == 'active',
-                        AlertInfoDO.component_type != 'downtime',
-                        AlertInfoDO.health_status == 'critical'
-                    ).count()
-                    
-                    if other_critical_alerts == 0:
-                        # 如果没有其他critical告警，将设备状态改为warning或ok
-                        warning_alerts = db.query(AlertInfoDO).filter(
-                            AlertInfoDO.device_id == device_id,
-                            AlertInfoDO.alert_status == 'active',
-                            AlertInfoDO.health_status == 'warning'
-                        ).count()
-                        device.health_status = 'warning' if warning_alerts > 0 else 'ok'
-                        
-            elif availability_status == 'offline':
-                # 设备宕机，健康状态设为critical
-                device.health_status = 'critical'
-        
-        # 2. 获取所有紧急度规则
-        rules_query = db.query(BusinessHardwareUrgencyRulesDO).filter(
-            BusinessHardwareUrgencyRulesDO.is_active == 1
-        ).all()
-        urgency_rules_map = {
-            (rule.business_type, rule.hardware_type.lower()): rule.urgency_level 
-            for rule in rules_query
-        }
-        
-        # 3. 处理可用性告警
-        alerts = result.get('alerts', [])
-        
-        if alerts:
-            logger.info(f"处理可用性告警 | device_id={device_id} | 告警数量: {len(alerts)}")
-            
-            # 获取现有的downtime类型活跃告警
-            existing_downtime_alerts = db.query(AlertInfoDO).filter(
-                AlertInfoDO.device_id == device_id,
-                AlertInfoDO.component_type == 'downtime',
-                AlertInfoDO.alert_status == 'active'
-            ).all()
-            
-            # 为每个告警应用业务规则确定紧急程度
-            for alert_data in alerts:
-                component_type = alert_data.get('component_type', 'downtime')
-                
-                # 应用业务规则确定紧急程度
-                urgency_level = urgency_rules_map.get(
-                    (business_type, component_type), 
-                    'urgent'  # 宕机默认为紧急
-                )
-                alert_data['urgency_level'] = urgency_level
-                
-                # 创建新告警
-                new_alert = AlertInfoDO(
-                    device_id=device_id,
-                    component_type=component_type,
-                    component_name=alert_data.get('component_name', '宕机检测'),
-                    health_status=alert_data.get('health_status', 'critical'),
-                    urgency_level=urgency_level,
-                    alert_status='active',
-                    alert_message=alert_data.get('alert_message', '设备宕机告警'),
-                    first_occurrence=datetime.now(),
-                    last_occurrence=datetime.now(),
-                    raw_data=alert_data.get('raw_data', '{}')
-                )
-                db.add(new_alert)
-                
-                logger.info(f"新建可用性告警 | device_id={device_id} | 紧急程度: {urgency_level}")
-            
-            # 如果有现有的downtime告警，将其标记为已解决（因为现在有新的状态）
-            for old_alert in existing_downtime_alerts:
-                old_alert.alert_status = 'resolved'
-                old_alert.resolved_time = datetime.now()
-                
-        else:
-            # 没有新告警，检查是否需要解决现有的downtime告警
-            existing_downtime_alerts = db.query(AlertInfoDO).filter(
-                AlertInfoDO.device_id == device_id,
-                AlertInfoDO.component_type == 'downtime',
-                AlertInfoDO.alert_status == 'active'
-            ).all()
-            
-            for old_alert in existing_downtime_alerts:
-                old_alert.alert_status = 'resolved'
-                old_alert.resolved_time = datetime.now()
-                logger.info(f"解决可用性告警 | device_id={device_id} | 设备已恢复在线")
-        
-        db.commit()
-        logger.info(f"设备可用性结果保存完成 | device_id={device_id}")
-        
-    except Exception as e:
-        logger.error(f"保存设备可用性结果失败 | device_id={device_info.get('device_id', 'N/A')}: {str(e)}")
-        db.rollback()
-    finally:
-        db.close()
+# 已删除 save_availability_result 函数
 
 
 # Celery Beat 启动命令（示例）：
