@@ -87,3 +87,24 @@ async def clear_monitor_cache_all(request: Request):
     logger.info(clear_cache_all_result.message)
 
     return ResponseUtil.success(msg=clear_cache_all_result.message)
+
+
+@cacheController.post(
+    '/refreshComponentNameCache', dependencies=[Depends(CheckUserInterfaceAuth('monitor:cache:list'))]
+)
+async def refresh_component_name_cache():
+    """
+    刷新组件名称缓存
+    """
+    try:
+        # 导入组件名称服务
+        from module_redfish.utils.component_name_service import component_name_service
+        
+        # 刷新缓存
+        component_name_service.refresh_mapping()
+        logger.info('组件名称缓存刷新成功')
+        
+        return ResponseUtil.success(msg='组件名称缓存刷新成功')
+    except Exception as e:
+        logger.error(f'组件名称缓存刷新失败: {str(e)}')
+        return ResponseUtil.error(msg=f'组件名称缓存刷新失败: {str(e)}')

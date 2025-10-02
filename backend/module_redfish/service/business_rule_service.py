@@ -603,7 +603,14 @@ class BusinessRuleService:
             
             success = await HardwareTypeDao.edit_hardware_type(db, hardware_type)
             if success:
-                logger.info(f"成功编辑硬件类型: {hardware_type.type_id}")
+                # 刷新组件名称服务缓存
+                try:
+                    from module_redfish.utils.component_name_service import component_name_service
+                    component_name_service.refresh_mapping()
+                    logger.info(f"成功编辑硬件类型并刷新缓存: {hardware_type.type_id}")
+                except Exception as cache_error:
+                    logger.warning(f"刷新组件名称缓存失败: {str(cache_error)}")
+                
                 return ResponseUtil.success(msg="编辑硬件类型成功")
             else:
                 return ResponseUtil.failure(msg="编辑硬件类型失败")

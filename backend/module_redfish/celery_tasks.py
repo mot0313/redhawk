@@ -18,6 +18,7 @@ from config.get_db import get_sync_db
 from .entity.do import DeviceInfoDO, AlertInfoDO, BusinessHardwareUrgencyRulesDO
 from .core.realtime_service import PushServiceManager
 from .utils.component_type_mapper import to_hardware_code
+from .utils.component_name_service import component_name_service
 
 # 导入统一的Celery配置
 from .celery_config import celery_app

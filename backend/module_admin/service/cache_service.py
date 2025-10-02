@@ -61,6 +61,13 @@ class CacheService:
         :param cache_name: 缓存名称
         :return: 缓存键名列表信息
         """
+        # 特殊处理组件名称缓存（Redis Hash结构）
+        if cache_name == 'component_name_mappings':
+            # 获取Hash中的所有字段名
+            cache_keys = await request.app.state.redis.hkeys(cache_name)
+            return cache_keys
+        
+        # 处理其他类型的缓存（普通键值对）
         cache_keys = await request.app.state.redis.keys(f'{cache_name}*')
         cache_key_list = [key.split(':', 1)[1] for key in cache_keys if key.startswith(f'{cache_name}:')]
 
@@ -76,6 +83,12 @@ class CacheService:
         :param cache_key: 缓存键名
         :return: 缓存内容信息
         """
+        # 特殊处理组件名称缓存（Redis Hash结构）
+        if cache_name == 'component_name_mappings':
+            cache_value = await request.app.state.redis.hget(cache_name, cache_key)
+            return CacheInfoModel(cacheKey=cache_key, cacheName=cache_name, cacheValue=cache_value, remark='组件类型映射')
+        
+        # 处理其他类型的缓存（普通键值对）
         cache_value = await request.app.state.redis.get(f'{cache_name}:{cache_key}')
 
         return CacheInfoModel(cacheKey=cache_key, cacheName=cache_name, cacheValue=cache_value, remark='')
@@ -89,6 +102,22 @@ class CacheService:
         :param cache_name: 缓存名称
         :return: 操作缓存响应信息
         """
+        # 特殊处理组件名称缓存（Redis Hash结构）
+        if cache_name == 'component_name_mappings':
+            await request.app.state.redis.delete(cache_name)
+            
+            # 清除后自动重新加载组件名称缓存
+            try:
+                from module_redfish.utils.component_name_service import component_name_service
+                component_name_service.refresh_mapping()
+                return CrudResponseModel(is_success=True, message=f'{cache_name}对应键值清除成功，已自动重新加载缓存')
+            except Exception as e:
+                # 如果重新加载失败，记录警告但不影响清除操作
+                from utils.log_util import logger
+                logger.warning(f'清除组件名称缓存后重新加载失败: {str(e)}')
+                return CrudResponseModel(is_success=True, message=f'{cache_name}对应键值清除成功，但重新加载缓存失败')
+        
+        # 处理其他类型的缓存（普通键值对）
         cache_keys = await request.app.state.redis.keys(f'{cache_name}*')
         if cache_keys:
             await request.app.state.redis.delete(*cache_keys)

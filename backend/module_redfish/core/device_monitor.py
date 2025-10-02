@@ -10,6 +10,7 @@ from .redfish_client import RedfishClient, decrypt_password
 from ..service.connectivity_service import ConnectivityService
 from ..adapters import get_vendor_adaptor
 from ..utils.component_type_mapper import to_hardware_code
+from ..utils.component_name_service import component_name_service
 
 
 class DeviceMonitor:
@@ -218,7 +219,7 @@ class DeviceMonitor:
                 
                 component_status = {
                     "component_type": to_hardware_code("downtime", {}),
-                    "component_name": "宕机",
+                    "component_name": component_name_service.get_standard_name("downtime"),
                     "health_status": self._normalize_health_status(health_status)
                 }
                 components.append(component_status)
@@ -229,7 +230,7 @@ class DeviceMonitor:
                         "device_id": device_info['device_id'],
                         "alert_source": "downtime_detection",
                         "component_type": to_hardware_code("downtime", {}),
-                        "component_name": "宕机",
+                        "component_name": component_name_service.get_standard_name("downtime"),
                         "health_status": self._normalize_health_status(health_status),
                         "urgency_level": self._map_health_to_urgency_level(health_status),
                         "alert_message": f"设备宕机告警: 业务IP {business_ip} 无法连通 - {connectivity_result.get('error', '连接失败')}",
@@ -243,7 +244,7 @@ class DeviceMonitor:
                 # 连通性检查失败时，记录为未知状态
                 component_status = {
                     "component_type": to_hardware_code("downtime", {}),
-                    "component_name": "宕机",
+                    "component_name": component_name_service.get_standard_name("downtime"),
                     "health_status": "unknown"
                 }
                 components.append(component_status)
@@ -263,7 +264,7 @@ class DeviceMonitor:
                 
                 component_status = {
                     "component_type": "OOB_Connectivity",
-                    "component_name": "带外连通性",
+                    "component_name": component_name_service.get_standard_name("oob_connectivity"),
                     "health_status": self._normalize_health_status(health_status)
                 }
                 components.append(component_status)
@@ -274,7 +275,7 @@ class DeviceMonitor:
                         "device_id": device_info['device_id'],
                         "alert_source": "oob_connectivity_detection",
                         "component_type": "OOB_Connectivity",
-                        "component_name": "带外连通性",
+                        "component_name": component_name_service.get_standard_name("oob_connectivity"),
                         "health_status": self._normalize_health_status(health_status),
                         "urgency_level": self._map_health_to_urgency_level(health_status),
                         "alert_message": f"带外IP连通性告警: 带外IP {oob_ip} 无法连通 - {oob_connectivity_result.get('error', '连接失败')}",
@@ -288,7 +289,7 @@ class DeviceMonitor:
                 # 连通性检查失败时，记录为未知状态
                 component_status = {
                     "component_type": "OOB_Connectivity",
-                    "component_name": "带外连通性",
+                    "component_name": component_name_service.get_standard_name("oob_connectivity"),
                     "health_status": "unknown"
                 }
                 components.append(component_status)
@@ -365,7 +366,7 @@ class DeviceMonitor:
                 if total_memory_count > 0:
                     summary_component = {
                         "component_type": to_hardware_code("memory", {}),
-                        "component_name": "MemorySummary",
+                        "component_name": component_name_service.get_standard_name("memory", "MemorySummary"),
                         "health_status": "critical" if critical_memory_count >= total_memory_count // 2 else "warning"
                     }
                     all_components.append(summary_component)
@@ -374,7 +375,7 @@ class DeviceMonitor:
                         "device_id": device_info['device_id'],
                         "alert_source": "redfish",
                         "component_type": summary_component["component_type"],
-                        "component_name": "MemorySummary",
+                        "component_name": component_name_service.get_standard_name("memory", "MemorySummary"),
                         "health_status": summary_component["health_status"],
                         "urgency_level": self._map_health_to_urgency_level(summary_component["health_status"]),
                         "alert_message": f"内存模块汇总告警: {critical_memory_count}/{total_memory_count} 模块异常",
@@ -545,7 +546,7 @@ class DeviceMonitor:
                     logger.info("MemorySummary fallback triggered | manufacturer={} rollup={}", manufacturer or 'Unknown', rollup)
                     summary_component = {
                         "component_type": to_hardware_code("memory", {}),
-                        "component_name": "MemorySummary",
+                        "component_name": component_name_service.get_standard_name("memory", "MemorySummary"),
                         "health_status": self._normalize_health_status(rollup)
                     }
                     all_components.append(summary_component)
@@ -553,7 +554,7 @@ class DeviceMonitor:
                         "device_id": device_info['device_id'],
                         "alert_source": "redfish",
                         "component_type": summary_component["component_type"],
-                        "component_name": "MemorySummary",
+                        "component_name": component_name_service.get_standard_name("memory", "MemorySummary"),
                         "health_status": summary_component["health_status"],
                         "urgency_level": self._map_health_to_urgency_level(rollup),
                         "alert_message": f"Memory summary health issue: {rollup}",
@@ -611,7 +612,7 @@ class DeviceMonitor:
         
         component_status = {
             "component_type": "system",
-            "component_name": "System",
+            "component_name": component_name_service.get_standard_name("system", "System"),
             "health_status": self._normalize_health_status(health_status)
         }
         
@@ -621,7 +622,7 @@ class DeviceMonitor:
                 "device_id": device_info['device_id'],
                 "alert_source": "redfish",
                 "component_type": "system",
-                "component_name": "System",
+                "component_name": component_name_service.get_standard_name("system", "System"),
                 "health_status": self._normalize_health_status(health_status),
                 "urgency_level": self._map_health_to_urgency_level(health_status),
                 "alert_message": f"System health issue: {health_status}, State: {state}",

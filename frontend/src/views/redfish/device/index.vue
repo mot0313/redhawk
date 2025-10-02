@@ -173,7 +173,7 @@
       <el-table-column label="操作" align="center" width="180" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip content="详情" placement="top">
-            <el-button link type="info" icon="View" @click="handleUpdate(scope.row)"
+            <el-button link type="info" icon="View" @click="handleDetail(scope.row)"
               v-hasPermi="['redfish:device:query']"></el-button>
           </el-tooltip>
           <el-tooltip content="修改" placement="top">
