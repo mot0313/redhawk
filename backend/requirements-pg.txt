@@ -1,6 +1,9 @@
 APScheduler==3.11.0
 asyncpg==0.30.0
-DateTime==5.5
+celery==5.5.3
+flower==2.0.1
+kombu==5.5.2
+redis==5.2.1
 fastapi[all]==0.115.8
 loguru==0.7.3
 openpyxl==3.1.5
@@ -11,16 +14,9 @@ psutil==7.0.0
 pydantic-validation-decorator==0.1.4
 PyJWT[crypto]==2.10.1
 psycopg2-binary==2.9.10
-redis==5.2.1
 requests==2.32.3
 SQLAlchemy[asyncio]==2.0.38
 sqlglot[rs]==26.6.0
 user-agents==2.2.0
-
-# Redfish告警系统新增依赖
-celery[redis]==5.4.0
-flower==2.0.1
-redfish==3.2.1
-aiohttp==3.10.11
-cryptography==42.0.8
-
+redfish==3.2.5
+cryptography==43.0.3
