@@ -1,0 +1,119 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: redhawk
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 0000abc!
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d redhawk"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile.backend
+    env_file:
+      - ../backend/.env.prod
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "9099"
+    restart: always
+
+  # Celery Worker（静默：warning）
+  celery-worker:
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile.backend
+    environment:
+      - PYTHONPATH=/app:/app/backend
+    command: >
+      python3 -m celery -A backend.module_redfish.celery_config worker
+      --loglevel=warning
+      --concurrency=4
+      --pool=threads
+      --queues=default,monitoring,batch,maintenance
+    env_file:
+      - ../backend/.env.prod
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    restart: always
+
+  # Celery Beat（静默：warning）
+  celery-beat:
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile.backend
+    environment:
+      - PYTHONPATH=/app:/app/backend
+    command: >
+      python3 -m celery -A backend.module_redfish.celery_config beat
+      --loglevel=warning
+      --schedule=/app/logs/celery/celerybeat-schedule
+    env_file:
+      - ../backend/.env.prod
+    volumes:
+      - celog:/app/logs/celery
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    restart: always
+
+  # Flower 监控（默认 5555 端口；适合排障）
+  flower:
+    image: mher/flower
+    command: >
+      celery --broker=redis://redis:6379/1 flower
+      --port=5555
+      --inspect_timeout=10
+      --loglevel=warning
+    ports:
+      - "5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
+
+  # 前端 + Nginx 反代到 /api
+  frontend:
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile.frontend
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.frontend.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: always
+
+volumes:
+  dbdata:
+  redisdata:
+  webroot:
+  celog:

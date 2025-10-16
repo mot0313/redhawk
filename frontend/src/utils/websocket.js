@@ -53,7 +53,7 @@ class WebSocketService {
     const host = window.location.hostname
     const port = window.location.port
     // return `${protocol}//${host}:${port}/ws/redfish`
-    return `${protocol}//${host}:9099/ws/redfish`
+    return `${protocol}//${host}/ws/redfish`
   }
 
   /**
