@@ -3946,6 +3946,20 @@ CREATE INDEX ix_alert_info_lifecycle ON public.alert_info USING btree (device_id
 
 CREATE INDEX ix_apscheduler_jobs_next_run_time ON public.apscheduler_jobs USING btree (next_run_time);
 
+--
+-- Name: update_alert_info_updated_time; Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE OR REPLACE FUNCTION public.update_alert_info_updated_time()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+    NEW.update_time := CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$function$;
+
 
 --
 -- Name: alert_info trigger_alert_info_update_time; Type: TRIGGER; Schema: public; Owner: -
